@@ -1,0 +1,218 @@
+// schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================
+// USER & AUTH
+// ==========================================
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Discogs connection
+  discogsUsername String?
+  discogsToken    String? // Encrypted OAuth token
+
+  // Import tracking
+  lastImportAt     DateTime?
+  lastImportStatus String? // "pending" | "in_progress" | "completed" | "failed"
+
+  // Relations
+  records        UserRecord[]
+  shelves        Shelf[]
+  magicLinkTokens MagicLinkToken[]
+
+  @@index([email])
+}
+
+model MagicLinkToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  email     String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String?
+
+  @@index([token])
+  @@index([email])
+}
+
+// ==========================================
+// CANONICAL RELEASE DATA
+// ==========================================
+// Stores Discogs release metadata globally.
+// Multiple users can reference the same release.
+// Design accepts partial data - not all fields required.
+
+model Release {
+  id String @id @default(cuid())
+
+  // Discogs linkage (optional - allows manual adds without full Discogs data)
+  discogsId       Int?    @unique
+  discogsMasterId Int? // For grouping pressings (future use)
+
+  // Core metadata (all optional to support partial imports)
+  title      String?
+  artist     String? // Flattened artist string for search
+  label      String?
+  catNo      String?
+  year       Int?
+  country    String? // Release country
+  genres     String[] // Array of genre strings
+  styles     String[] // Array of style strings (more specific than genres)
+  formats    String[] // ["Vinyl", "LP", "12\"", "33 ⅓ RPM"] - flattened from format array
+  coverUrl   String? // Primary cover image
+  thumbUrl   String? // Thumbnail
+
+  // Community/marketplace data from Discogs
+  communityHave Int? // Number of users who have this release
+  communityWant Int? // Number of users who want this release
+
+  // Full Discogs response stored as JSON for future use
+  // Includes: tracklist, credits, videos, identifiers, companies, etc.
+  discogsData Json?
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  userRecords UserRecord[]
+
+  @@index([discogsId])
+  @@index([artist]) // For search
+  @@index([title])  // For search
+}
+
+// ==========================================
+// USER-SPECIFIC OWNERSHIP DATA
+// ==========================================
+// Separates "what the record is" from "how I relate to it"
+// This allows shared canonical data + personal context
+
+model UserRecord {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  releaseId String
+  release   Release @relation(fields: [releaseId], references: [id], onDelete: Cascade)
+
+  // Personal data (all optional)
+  notes String? // Free-text personal notes
+
+  // Condition tracking (standard Discogs grading)
+  // Values: "Mint (M)", "Near Mint (NM)", "Very Good Plus (VG+)", "Very Good (VG)", "Good Plus (G+)", "Good (G)", "Fair (F)", "Poor (P)"
+  mediaCondition  String? // Vinyl/CD condition
+  sleeveCondition String? // Cover/sleeve condition
+
+  // Discogs collection import metadata
+  addedToDiscogsAt DateTime? // When they added it to Discogs
+  instanceId       Int? // Discogs collection instance ID (for sync/update)
+
+  // Future-proofing for DJ features (not used in V1)
+  // These columns exist but aren't exposed in UI yet
+  bpm     Int?
+  key     String?
+  energy  Int? // 1-10 scale
+  tags    String[] // For future custom tagging
+
+  // Timestamps
+  addedAt   DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  shelfPlacements ShelfPlacement[]
+
+  @@unique([userId, releaseId]) // User can only own a release once
+  @@index([userId])
+  @@index([addedAt]) // For "recently added" views
+}
+
+// ==========================================
+// SHELVES (Simple Grouping)
+// ==========================================
+
+model Shelf {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  color       String? // Hex color for visual distinction
+  sortOrder   Int      @default(0) // User-defined shelf order
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  placements ShelfPlacement[]
+
+  @@index([userId])
+  @@index([sortOrder])
+}
+
+// Join table: Many-to-many between UserRecords and Shelves
+// A record can be on multiple shelves
+model ShelfPlacement {
+  id String @id @default(cuid())
+
+  userRecordId String
+  userRecord   UserRecord @relation(fields: [userRecordId], references: [id], onDelete: Cascade)
+
+  shelfId String
+  shelf   Shelf  @relation(fields: [shelfId], references: [id], onDelete: Cascade)
+
+  addedAt DateTime @default(now())
+
+  @@unique([userRecordId, shelfId]) // Can't add same record to same shelf twice
+  @@index([shelfId])
+  @@index([userRecordId])
+}
+
+// ==========================================
+// BACKGROUND JOB TRACKING
+// ==========================================
+// Tracks long-running Discogs imports
+// Allows UI to poll for progress without blocking
+
+model ImportJob {
+  id String @id @default(cuid())
+
+  userId String
+  type   String // "discogs_collection_full" | "discogs_collection_delta"
+
+  status String @default("pending") // "pending" | "in_progress" | "completed" | "failed"
+
+  // Progress tracking
+  totalItems     Int?
+  processedItems Int      @default(0)
+  failedItems    Int      @default(0)
+
+  // Error handling
+  errorMessage String?
+  errorDetails Json?
+
+  // Timestamps
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+}
