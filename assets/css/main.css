@@ -1,22 +1,364 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
+  :root {
+    /* Dark theme colors */
+    --bg-primary: #0a0a0a;
+    --bg-secondary: #111111;
+    --bg-tertiary: #1a1a1a;
+    --bg-glass: rgba(255, 255, 255, 0.05);
+    --bg-glass-hover: rgba(255, 255, 255, 0.08);
+    
+    /* Text colors */
+    --text-primary: #ffffff;
+    --text-secondary: #a1a1a1;
+    --text-tertiary: #525252;
+    
+    /* Accent gradients */
+    --gradient-primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    --gradient-neon: linear-gradient(135deg, #00f5ff 0%, #fc00ff 100%);
+    --gradient-warm: linear-gradient(135deg, #ff6b6b 0%, #ffd93d 100%);
+    --gradient-cool: linear-gradient(135deg, #4ecdc4 0%, #44a08d 100%);
+    --gradient-purple: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+    
+    /* Neon colors */
+    --neon-blue: #00f5ff;
+    --neon-pink: #fc00ff;
+    --neon-green: #39ff14;
+    --neon-yellow: #ffd93d;
+    
+    /* Shadows */
+    --shadow-glass: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+    --shadow-neon: 0 0 20px rgba(0, 245, 255, 0.3);
+    --shadow-intense: 0 25px 50px -12px rgba(0, 0, 0, 0.8);
+    
+    /* Borders */
+    --border-glass: 1px solid rgba(255, 255, 255, 0.1);
+    --border-glow: 1px solid rgba(0, 245, 255, 0.3);
+  }
+
+  * {
+    border-radius: 0 !important;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
   body {
-    @apply font-light text-gray-900;
-    letter-spacing: 0.01em;
+    @apply antialiased;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-weight: 300;
+    letter-spacing: -0.01em;
+    line-height: 1.6;
+  }
+
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    background: var(--bg-secondary);
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    background: var(--text-tertiary);
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--text-secondary);
   }
 
   h1, h2, h3, h4, h5, h6 {
-    @apply font-normal;
-    letter-spacing: -0.02em;
+    font-weight: 600;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+    color: var(--text-primary);
   }
-}
 
-/* Remove all border radius globally */
-* {
-  border-radius: 0 !important;
+  /* Glass morphism */
+  .glass {
+    background: var(--bg-glass);
+    backdrop-filter: blur(20px);
+    border: var(--border-glass);
+    box-shadow: var(--shadow-glass);
+  }
+
+  .glass-hover:hover {
+    background: var(--bg-glass-hover);
+    border: var(--border-glow);
+    box-shadow: var(--shadow-neon);
+  }
+
+  /* Neon effects */
+  .neon-text {
+    color: var(--neon-blue);
+    text-shadow: 0 0 10px rgba(0, 245, 255, 0.5);
+  }
+
+  .neon-glow {
+    box-shadow: 0 0 20px rgba(0, 245, 255, 0.3),
+                0 0 40px rgba(0, 245, 255, 0.1),
+                inset 0 0 20px rgba(0, 245, 255, 0.1);
+    border: 1px solid rgba(0, 245, 255, 0.3);
+  }
+
+  .neon-pink {
+    color: var(--neon-pink);
+    text-shadow: 0 0 10px rgba(252, 0, 255, 0.5);
+  }
+
+  /* Gradient text */
+  .gradient-text {
+    background: var(--gradient-neon);
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-size: 200% 200%;
+    animation: gradientFlow 4s ease-in-out infinite;
+  }
+
+  .gradient-text-purple {
+    background: var(--gradient-purple);
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-size: 200% 200%;
+    animation: gradientFlow 6s ease-in-out infinite;
+  }
+
+  /* Modern buttons - Mobile First */
+  .btn-primary {
+    background: var(--gradient-neon);
+    border: none;
+    color: var(--bg-primary);
+    font-weight: 600;
+    padding: 0.75rem 1.5rem;
+    position: relative;
+    overflow: hidden;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    min-height: 44px; /* iOS touch target */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+  }
+
+  .btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-neon);
+  }
+
+  .btn-secondary {
+    background: transparent;
+    border: var(--border-glow);
+    color: var(--text-primary);
+    font-weight: 500;
+    padding: 0.75rem 1.5rem;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    min-height: 44px; /* iOS touch target */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+  }
+
+  .btn-secondary:hover {
+    background: var(--bg-glass);
+    border: var(--border-glow);
+    box-shadow: var(--shadow-neon);
+    transform: translateY(-1px);
+  }
+
+  /* Mobile-optimized text sizes */
+  @media (max-width: 640px) {
+    .btn-primary, .btn-secondary {
+      padding: 0.5rem 1rem;
+      font-size: 0.875rem;
+    }
+    
+    .gradient-text {
+      background-size: 300% 300%;
+    }
+    
+    /* Reduced motion on mobile */
+    .floating {
+      animation-duration: 8s;
+    }
+    
+    /* Faster transitions on mobile */
+    .glass-hover:hover {
+      transition-duration: 0.2s;
+    }
+  }
+
+  /* Animations */
+  @keyframes gradientFlow {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  @keyframes float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-20px); }
+  }
+
+  @keyframes glow {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+  }
+
+  @keyframes slideUp {
+    from { 
+      opacity: 0;
+      transform: translateY(30px);
+    }
+    to { 
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes slideDown {
+    from { 
+      opacity: 0;
+      transform: translateY(-30px);
+    }
+    to { 
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes scaleIn {
+    from { 
+      opacity: 0;
+      transform: scale(0.9);
+    }
+    to { 
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  @keyframes staggerIn {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Utility classes */
+  .floating {
+    animation: float 6s ease-in-out infinite;
+  }
+
+  .pulsing {
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  .glowing {
+    animation: glow 3s ease-in-out infinite;
+  }
+
+  .slide-up {
+    animation: slideUp 0.6s ease-out forwards;
+  }
+
+  .slide-down {
+    animation: slideDown 0.6s ease-out forwards;
+  }
+
+  .scale-in {
+    animation: scaleIn 0.4s ease-out forwards;
+  }
+
+  .stagger-item {
+    opacity: 0;
+    animation: staggerIn 0.6s ease-out forwards;
+  }
+
+  /* Dark theme background patterns */
+  .bg-dots {
+    background-image: radial-gradient(circle, rgba(255, 255, 255, 0.1) 1px, transparent 1px);
+    background-size: 20px 20px;
+  }
+
+  .bg-grid {
+    background-image: 
+      linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+    background-size: 50px 50px;
+  }
+
+  /* Special effects for album covers */
+  .album-glow {
+    position: relative;
+  }
+
+  .album-glow::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    background: var(--gradient-neon);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    z-index: -1;
+  }
+
+  .album-glow:hover::before {
+    opacity: 0.7;
+  }
+
+  /* Custom selection */
+  ::selection {
+    background: rgba(0, 245, 255, 0.2);
+    color: var(--neon-blue);
+  }
+
+  /* Filter slide-in styles */
+  .filter-slide {
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+
+  /* Improve touch interaction on mobile */
+  @media (max-width: 768px) {
+    .filter-item {
+      min-height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .filter-panel {
+      touch-action: manipulation;
+    }
+    
+    /* Hide scrollbar but keep scrolling */
+    .filter-options::-webkit-scrollbar {
+      display: none;
+    }
+    .filter-options {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  }
 }

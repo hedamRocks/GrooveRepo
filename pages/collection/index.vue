@@ -12,6 +12,33 @@ const records = ref<any[]>([])
 const totalRecords = ref(0)
 const isSyncing = ref(false)
 
+// Filter state
+const showFilters = ref(false)
+const filters = ref({
+  genres: [] as string[],
+  styles: [] as string[],
+  yearRange: { min: null as number | null, max: null as number | null },
+  countries: [] as string[],
+  labels: [] as string[]
+})
+
+// Filter options (will be populated from API or computed from records)
+const filterOptions = ref({
+  genres: [] as string[],
+  styles: [] as string[],
+  countries: [] as string[],
+  labels: [] as string[],
+  years: { min: 1950, max: new Date().getFullYear() }
+})
+
+const activeFiltersCount = computed(() => {
+  return filters.value.genres.length + 
+         filters.value.styles.length + 
+         filters.value.countries.length + 
+         filters.value.labels.length +
+         (filters.value.yearRange.min !== null || filters.value.yearRange.max !== null ? 1 : 0)
+})
+
 let debounceTimeout: NodeJS.Timeout | null = null
 
 // Debounce search input
@@ -22,10 +49,10 @@ watch(search, (newValue) => {
   }, 300)
 })
 
-// Fetch records when search changes
-watch(searchDebounced, async () => {
+// Fetch records when search or filters change
+watch([searchDebounced, filters], async () => {
   await fetchRecords()
-}, { immediate: true })
+}, { immediate: true, deep: true })
 
 async function fetchRecords() {
   isLoading.value = true
@@ -34,11 +61,35 @@ async function fetchRecords() {
     if (searchDebounced.value) {
       params.append('search', searchDebounced.value)
     }
+    
+    // Add filter parameters
+    if (filters.value.genres.length > 0) {
+      params.append('genres', filters.value.genres.join(','))
+    }
+    if (filters.value.styles.length > 0) {
+      params.append('styles', filters.value.styles.join(','))
+    }
+    if (filters.value.countries.length > 0) {
+      params.append('countries', filters.value.countries.join(','))
+    }
+    if (filters.value.labels.length > 0) {
+      params.append('labels', filters.value.labels.join(','))
+    }
+    if (filters.value.yearRange.min !== null) {
+      params.append('yearMin', filters.value.yearRange.min.toString())
+    }
+    if (filters.value.yearRange.max !== null) {
+      params.append('yearMax', filters.value.yearRange.max.toString())
+    }
+    
     params.append('limit', '100')
 
     const response = await $fetch(`/api/records?${params}`)
     records.value = response.records
     totalRecords.value = response.pagination.total
+    
+    // Update filter options based on available data
+    updateFilterOptions(response.records)
   } catch (error) {
     console.error('Failed to fetch records:', error)
   } finally {
@@ -46,11 +97,74 @@ async function fetchRecords() {
   }
 }
 
+function updateFilterOptions(recordsData: any[]) {
+  const genres = new Set<string>()
+  const styles = new Set<string>()
+  const countries = new Set<string>()
+  const labels = new Set<string>()
+  let minYear = new Date().getFullYear()
+  let maxYear = 1950
+
+  recordsData.forEach(record => {
+    if (record.release.genres) {
+      record.release.genres.forEach((genre: string) => genres.add(genre))
+    }
+    if (record.release.styles) {
+      record.release.styles.forEach((style: string) => styles.add(style))
+    }
+    if (record.release.country) {
+      countries.add(record.release.country)
+    }
+    if (record.release.label) {
+      labels.add(record.release.label)
+    }
+    if (record.release.year) {
+      minYear = Math.min(minYear, record.release.year)
+      maxYear = Math.max(maxYear, record.release.year)
+    }
+  })
+
+  filterOptions.value = {
+    genres: Array.from(genres).sort(),
+    styles: Array.from(styles).sort(),
+    countries: Array.from(countries).sort(),
+    labels: Array.from(labels).sort(),
+    years: { min: minYear, max: maxYear }
+  }
+}
+
 // Clear search
 function clearSearch() {
   search.value = ''
 }
+// Filter functions
+function toggleFilter(type: 'genres' | 'styles' | 'countries' | 'labels', value: string) {
+  const filterArray = filters.value[type] as string[]
+  const index = filterArray.indexOf(value)
+  if (index > -1) {
+    filterArray.splice(index, 1)
+  } else {
+    filterArray.push(value)
+  }
+}
 
+function clearFilters() {
+  filters.value = {
+    genres: [],
+    styles: [],
+    yearRange: { min: null, max: null },
+    countries: [],
+    labels: []
+  }
+}
+
+function clearFilter(type: 'genres' | 'styles' | 'countries' | 'labels' | 'yearRange') {
+  if (type === 'yearRange') {
+    filters.value.yearRange = { min: null, max: null }
+  } else {
+    filters.value[type] = []
+  }
+}
 // Sync with Discogs
 async function syncDiscogs() {
   navigateTo('/onboarding/import-progress')
@@ -79,134 +193,480 @@ async function refreshMetadata() {
 </script>
 
 <template>
-  <div class="min-h-screen bg-white">
-    <!-- Header -->
-    <header class="bg-white border-b border-gray-200 sticky top-0 z-10">
-      <div class="max-w-7xl mx-auto px-6 lg:px-8 py-6">
-        <div class="flex items-start justify-between mb-6">
+  <div class="min-h-screen bg-dots" style="background-color: var(--bg-primary);">
+    <!-- Mobile-First Header -->
+    <header class="glass sticky top-0 z-50 border-b" style="border-color: rgba(255, 255, 255, 0.1);">
+      <div class="relative px-4 py-3">
+        <!-- Top Row: Title + Actions -->
+        <div class="flex items-center justify-between mb-3">
           <div>
-            <h1 class="text-4xl font-light text-gray-900 tracking-tight">Collection</h1>
-            <p class="text-gray-500 mt-2 font-light">{{ totalRecords }} records</p>
+            <h1 class="text-2xl font-bold gradient-text">Collection</h1>
+            <div class="flex items-center gap-2 mt-1">
+              <span class="font-mono text-xs neon-text">{{ totalRecords }}</span>
+              <span class="text-xs" style="color: var(--text-tertiary);">records</span>
+              <div v-if="activeFiltersCount > 0" class="flex items-center gap-1 ml-2">
+                <div class="w-1 h-1 bg-cyan-400 rounded-full neon-glow"></div>
+                <span class="text-xs font-mono text-cyan-400">{{ activeFiltersCount }} filters</span>
+              </div>
+            </div>
           </div>
-          <div class="flex gap-2">
-            <button
-              @click="syncDiscogs"
-              :disabled="isSyncing"
-              class="border border-gray-200 text-gray-700 px-5 py-2.5 hover:border-gray-400 transition font-light disabled:opacity-50 disabled:cursor-not-allowed"
+          <div class="flex items-center gap-2">
+            <!-- Filter Button -->
+            <button 
+              @click="showFilters = true"
+              class="btn-secondary text-sm px-3 py-2 relative"
+              :class="{ 'neon-glow': activeFiltersCount > 0 }"
             >
-              {{ isSyncing ? 'Syncing...' : 'Sync Discogs' }}
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.707A1 1 0 013 7V4z"></path>
+              </svg>
+              <div v-if="activeFiltersCount > 0" class="absolute -top-1 -right-1 w-3 h-3 bg-cyan-400 rounded-full flex items-center justify-center">
+                <span class="text-xs font-bold text-black">{{ activeFiltersCount }}</span>
+              </div>
             </button>
-            <button
-              @click="refreshMetadata"
-              :disabled="isRefreshing"
-              class="border border-gray-200 text-gray-700 px-5 py-2.5 hover:border-gray-400 transition font-light disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Fetch full details (tracklist, community data) for all records"
-            >
-              {{ isRefreshing ? 'Refreshing...' : 'Refresh Metadata' }}
-            </button>
-            <NuxtLink
-              to="/collection/add"
-              class="bg-black text-white px-5 py-2.5 hover:bg-gray-800 transition font-light border border-black"
-            >
-              Add Record
-            </NuxtLink>
-            <NuxtLink
-              to="/shelves"
-              class="border border-gray-200 text-gray-700 px-5 py-2.5 hover:border-gray-400 transition font-light"
-            >
-              Shelves
-            </NuxtLink>
-            <NuxtLink
-              to="/stats"
-              class="border border-gray-200 text-gray-700 px-5 py-2.5 hover:border-gray-400 transition font-light"
-            >
-              Stats
+            <!-- Add Record Button - Primary Action -->
+            <NuxtLink to="/collection/add" class="btn-primary text-sm px-4 py-2">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"></path>
+              </svg>
             </NuxtLink>
           </div>
         </div>
 
         <!-- Search Bar -->
-        <div class="relative">
-          <input
-            v-model="search"
-            type="text"
-            placeholder="Search by artist, title, or label..."
-            class="w-full px-4 py-3.5 pl-11 pr-11 border border-gray-200 focus:border-gray-400 outline-none transition font-light"
-          />
-          <svg
-            class="absolute left-4 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-            stroke-width="1.5"
-          >
-            <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-          </svg>
+        <div class="mb-3">
+          <div class="glass glass-hover relative">
+            <input
+              v-model="search"
+              type="text"
+              placeholder="Search music..."
+              class="w-full bg-transparent px-4 py-3 pl-10 pr-10 text-base outline-none placeholder-gray-500"
+              style="color: var(--text-primary);"
+            />
+            <div class="absolute left-3 top-1/2 transform -translate-y-1/2">
+              <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+              </svg>
+            </div>
+            <button
+              v-if="search"
+              @click="clearSearch"
+              class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-red-400 transition-colors"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"></path>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Action Buttons Row -->
+        <div class="flex gap-2 overflow-x-auto pb-1">
           <button
-            v-if="search"
-            @click="clearSearch"
-            class="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-700 transition"
+            @click="syncDiscogs"
+            :disabled="isSyncing"
+            class="btn-secondary text-xs px-3 py-2 whitespace-nowrap flex-shrink-0"
+            :class="{ 'opacity-50 cursor-not-allowed': isSyncing }"
           >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"></path>
+            <svg class="w-3 h-3 mr-1.5" :class="{ 'animate-spin': isSyncing }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
             </svg>
+            {{ isSyncing ? 'Syncing...' : 'Sync' }}
           </button>
+          
+          <button
+            @click="refreshMetadata"
+            :disabled="isRefreshing"
+            class="btn-secondary text-xs px-3 py-2 whitespace-nowrap flex-shrink-0"
+            :class="{ 'opacity-50 cursor-not-allowed': isRefreshing }"
+          >
+            <svg class="w-3 h-3 mr-1.5" :class="{ 'animate-pulse': isRefreshing }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
+            </svg>
+            {{ isRefreshing ? 'Refreshing...' : 'Refresh' }}
+          </button>
+
+          <NuxtLink to="/shelves" class="btn-secondary text-xs px-3 py-2 whitespace-nowrap flex-shrink-0">
+            <svg class="w-3 h-3 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+            </svg>
+            Shelves
+          </NuxtLink>
+
+          <NuxtLink to="/stats" class="btn-secondary text-xs px-3 py-2 whitespace-nowrap flex-shrink-0">
+            <svg class="w-3 h-3 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2h-2a2 2 0 00-2 2z"></path>
+            </svg>
+            Stats
+          </NuxtLink>
         </div>
       </div>
     </header>
 
+    <!-- Filter Slide-in Panel -->
+    <Teleport to="body">
+      <Transition
+        enter-active-class="transition-all duration-300 ease-out"
+        enter-from-class="opacity-0"
+        enter-to-class="opacity-100"
+        leave-active-class="transition-all duration-200 ease-in"
+        leave-from-class="opacity-100"
+        leave-to-class="opacity-0"
+      >
+        <div 
+          v-if="showFilters" 
+          class="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60]"
+          @click="showFilters = false"
+        >
+          <Transition
+            enter-active-class="transition-transform duration-300 ease-out"
+            enter-from-class="translate-x-full"
+            enter-to-class="translate-x-0"
+            leave-active-class="transition-transform duration-200 ease-in"
+            leave-from-class="translate-x-0"
+            leave-to-class="translate-x-full"
+          >
+            <div 
+              v-if="showFilters"
+              class="absolute right-0 top-0 h-full w-full sm:w-96 glass border-l filter-slide filter-panel"
+              style="background: var(--bg-secondary); border-color: rgba(255, 255, 255, 0.1);"
+              @click.stop
+            >
+              <!-- Filter Header -->
+              <div class="flex items-center justify-between p-4 border-b" style="border-color: rgba(255, 255, 255, 0.1);">
+                <div>
+                  <h2 class="text-lg font-bold gradient-text">Filters</h2>
+                  <p class="text-xs" style="color: var(--text-secondary);">Refine your collection</p>
+                </div>
+                <div class="flex items-center gap-2">
+                  <button 
+                    v-if="activeFiltersCount > 0"
+                    @click="clearFilters"
+                    class="text-xs px-3 py-1 bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30 transition-colors"
+                  >
+                    Clear All
+                  </button>
+                  <button 
+                    @click="showFilters = false"
+                    class="w-8 h-8 flex items-center justify-center glass-hover text-gray-400 hover:text-white"
+                  >
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Filter Content -->
+              <div class="p-4 overflow-y-auto h-full pb-20">
+                <!-- Active Filters -->
+                <div v-if="activeFiltersCount > 0" class="mb-6">
+                  <div class="flex flex-wrap gap-2">
+                    <button
+                      v-for="genre in filters.genres"
+                      :key="`active-genre-${genre}`"
+                      @click="toggleFilter('genres', genre)"
+                      class="px-2 py-1 text-xs bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/30 transition-colors flex items-center gap-1"
+                    >
+                      {{ genre }}
+                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                      </svg>
+                    </button>
+                    <button
+                      v-for="style in filters.styles"
+                      :key="`active-style-${style}`"
+                      @click="toggleFilter('styles', style)"
+                      class="px-2 py-1 text-xs bg-purple-500/20 text-purple-400 border border-purple-500/30 hover:bg-purple-500/30 transition-colors flex items-center gap-1"
+                    >
+                      {{ style }}
+                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                      </svg>
+                    </button>
+                    <button
+                      v-for="country in filters.countries"
+                      :key="`active-country-${country}`"
+                      @click="toggleFilter('countries', country)"
+                      class="px-2 py-1 text-xs bg-green-500/20 text-green-400 border border-green-500/30 hover:bg-green-500/30 transition-colors flex items-center gap-1"
+                    >
+                      {{ country }}
+                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                      </svg>
+                    </button>
+                    <button
+                      v-for="label in filters.labels"
+                      :key="`active-label-${label}`"
+                      @click="toggleFilter('labels', label)"
+                      class="px-2 py-1 text-xs bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 hover:bg-yellow-500/30 transition-colors flex items-center gap-1"
+                    >
+                      {{ label }}
+                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                      </svg>
+                    </button>
+                    <button
+                      v-if="filters.yearRange.min !== null || filters.yearRange.max !== null"
+                      @click="clearFilter('yearRange')"
+                      class="px-2 py-1 text-xs bg-pink-500/20 text-pink-400 border border-pink-500/30 hover:bg-pink-500/30 transition-colors flex items-center gap-1"
+                    >
+                      {{ filters.yearRange.min || filterOptions.years.min }}-{{ filters.yearRange.max || filterOptions.years.max }}
+                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Year Range Filter -->
+                <div v-if="filterOptions.years.min < filterOptions.years.max" class="mb-6">
+                  <h3 class="text-sm font-semibold mb-3 flex items-center gap-2" style="color: var(--text-primary);">
+                    <svg class="w-4 h-4 text-pink-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                    </svg>
+                    Release Year
+                  </h3>
+                  <div class="space-y-3">
+                    <div class="flex items-center gap-3">
+                      <div class="flex-1">
+                        <label class="text-xs" style="color: var(--text-secondary);">From</label>
+                        <input
+                          v-model.number="filters.yearRange.min"
+                          type="number"
+                          :min="filterOptions.years.min"
+                          :max="filterOptions.years.max"
+                          class="w-full mt-1 px-3 py-2 text-sm bg-transparent border border-gray-600 focus:border-pink-400 outline-none transition-colors"
+                          style="color: var(--text-primary);"
+                          :placeholder="filterOptions.years.min.toString()"
+                        />
+                      </div>
+                      <div class="flex-1">
+                        <label class="text-xs" style="color: var(--text-secondary);">To</label>
+                        <input
+                          v-model.number="filters.yearRange.max"
+                          type="number"
+                          :min="filterOptions.years.min"
+                          :max="filterOptions.years.max"
+                          class="w-full mt-1 px-3 py-2 text-sm bg-transparent border border-gray-600 focus:border-pink-400 outline-none transition-colors"
+                          style="color: var(--text-primary);"
+                          :placeholder="filterOptions.years.max.toString()"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Genres Filter -->
+                <div v-if="filterOptions.genres.length > 0" class="mb-6">
+                  <h3 class="text-sm font-semibold mb-3 flex items-center gap-2" style="color: var(--text-primary);">
+                    <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
+                    </svg>
+                    Genres
+                  </h3>
+                  <div class="flex flex-wrap gap-2 max-h-40 overflow-y-auto filter-options">
+                    <button
+                      v-for="genre in filterOptions.genres"
+                      :key="genre"
+                      @click="toggleFilter('genres', genre)"
+                      class="px-3 py-1 text-xs border transition-colors filter-item"
+                      :class="filters.genres.includes(genre) 
+                        ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30' 
+                        : 'bg-gray-800/50 text-gray-400 border-gray-600 hover:border-cyan-500/50'"
+                    >
+                      {{ genre }}
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Styles Filter -->
+                <div v-if="filterOptions.styles.length > 0" class="mb-6">
+                  <h3 class="text-sm font-semibold mb-3 flex items-center gap-2" style="color: var(--text-primary);">
+                    <svg class="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path>
+                    </svg>
+                    Styles
+                  </h3>
+                  <div class="flex flex-wrap gap-2 max-h-40 overflow-y-auto filter-options">
+                    <button
+                      v-for="style in filterOptions.styles"
+                      :key="style"
+                      @click="toggleFilter('styles', style)"
+                      class="px-3 py-1 text-xs border transition-colors filter-item"
+                      :class="filters.styles.includes(style) 
+                        ? 'bg-purple-500/20 text-purple-400 border-purple-500/30' 
+                        : 'bg-gray-800/50 text-gray-400 border-gray-600 hover:border-purple-500/50'"
+                    >
+                      {{ style }}
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Countries Filter -->
+                <div v-if="filterOptions.countries.length > 0" class="mb-6">
+                  <h3 class="text-sm font-semibold mb-3 flex items-center gap-2" style="color: var(--text-primary);">
+                    <svg class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    Countries
+                  </h3>
+                  <div class="flex flex-wrap gap-2 max-h-40 overflow-y-auto filter-options">
+                    <button
+                      v-for="country in filterOptions.countries"
+                      :key="country"
+                      @click="toggleFilter('countries', country)"
+                      class="px-3 py-1 text-xs border transition-colors filter-item"
+                      :class="filters.countries.includes(country) 
+                        ? 'bg-green-500/20 text-green-400 border-green-500/30' 
+                        : 'bg-gray-800/50 text-gray-400 border-gray-600 hover:border-green-500/50'"
+                    >
+                      {{ country }}
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Labels Filter -->
+                <div v-if="filterOptions.labels.length > 0" class="mb-6">
+                  <h3 class="text-sm font-semibold mb-3 flex items-center gap-2" style="color: var(--text-primary);">
+                    <svg class="w-4 h-4 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z"></path>
+                    </svg>
+                    Labels
+                  </h3>
+                  <div class="flex flex-wrap gap-2 max-h-40 overflow-y-auto filter-options">
+                    <button
+                      v-for="label in filterOptions.labels.slice(0, 50)"
+                      :key="label"
+                      @click="toggleFilter('labels', label)"
+                      class="px-3 py-1 text-xs border transition-colors filter-item"
+                      :class="filters.labels.includes(label) 
+                        ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' 
+                        : 'bg-gray-800/50 text-gray-400 border-gray-600 hover:border-yellow-500/50'"
+                    >
+                      {{ label }}
+                    </button>
+                  </div>
+                  <p v-if="filterOptions.labels.length > 50" class="text-xs mt-2" style="color: var(--text-tertiary);">
+                    Showing first 50 labels. Use search to find specific labels.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </Transition>
+        </div>
+      </Transition>
+    </Teleport>
+
     <!-- Collection Grid -->
-    <main class="max-w-7xl mx-auto px-6 lg:px-8 py-10">
+    <main class="px-4 py-6">
       <!-- Loading State -->
-      <div v-if="isLoading" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+      <div v-if="isLoading" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3">
         <div
           v-for="i in 12"
           :key="i"
-          class="aspect-square bg-gray-100 animate-pulse"
-        ></div>
+          class="aspect-square glass scale-in floating"
+          :style="{ 
+            animationDelay: `${i * 50}ms`,
+            animationDuration: `${3 + Math.random() * 3}s`
+          }"
+        >
+          <div class="w-full h-full flex items-center justify-center">
+            <div class="w-8 h-8 neon-glow pulsing" style="background: var(--neon-blue); opacity: 0.3;"></div>
+          </div>
+        </div>
       </div>
 
       <!-- Empty State -->
-      <div v-else-if="records.length === 0" class="text-center py-20">
-        <h3 class="text-2xl font-light text-gray-900 mb-2 tracking-tight">
-          {{ search ? 'No records found' : 'No records yet' }}
-        </h3>
-        <p class="text-gray-500 mb-8 font-light">
-          {{ search ? 'Try a different search term' : 'Start building your collection' }}
-        </p>
-        <NuxtLink
-          v-if="!search"
-          to="/collection/add"
-          class="inline-block bg-black text-white px-6 py-3 hover:bg-gray-800 transition font-light border border-black"
-        >
-          Add your first record
-        </NuxtLink>
-      </div>
-
-      <!-- Records Grid -->
-      <div v-else class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-        <NuxtLink
-          v-for="record in records"
-          :key="record.id"
-          :to="`/collection/${record.id}`"
-          class="group"
-        >
-          <div class="aspect-square bg-gray-100 overflow-hidden border border-gray-200 hover:border-gray-400 transition">
-            <img
-              v-if="record.release.coverUrl || record.release.thumbUrl"
-              :src="record.release.coverUrl || record.release.thumbUrl"
-              :alt="record.release.title"
-              class="w-full h-full object-cover group-hover:opacity-90 transition"
-            />
-            <div v-else class="w-full h-full flex items-center justify-center bg-gray-50">
-              <svg class="w-12 h-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
+      <div v-else-if="records.length === 0" class="flex items-center justify-center min-h-80">
+        <div class="text-center max-w-sm scale-in px-4">
+          <div class="relative mb-6">
+            <div class="w-20 h-20 mx-auto glass flex items-center justify-center floating">
+              <svg class="w-10 h-10 text-cyan-400 glowing" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
               </svg>
             </div>
           </div>
-          <div class="mt-2 space-y-0.5">
-            <p class="text-xs font-light text-gray-900 truncate">{{ record.release.artist || 'Unknown Artist' }}</p>
-            <p class="text-xs text-gray-500 truncate font-light">{{ record.release.title }}</p>
+          
+          <h3 class="text-xl font-bold gradient-text-purple mb-3">
+            {{ search ? 'No records found' : 'Your collection awaits' }}
+          </h3>
+          <p class="text-sm mb-6" style="color: var(--text-secondary);">
+            {{ search ? 'Try adjusting your search terms' : 'Start building your digital crate' }}
+          </p>
+          
+          <NuxtLink
+            v-if="!search"
+            to="/collection/add"
+            class="btn-primary inline-flex items-center gap-2 text-sm px-4 py-3"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"></path>
+            </svg>
+            Add your first record
+          </NuxtLink>
+        </div>
+      </div>
+
+      <!-- Records Grid -->
+      <div v-else class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3">
+        <NuxtLink
+          v-for="(record, index) in records"
+          :key="record.id"
+          :to="`/collection/${record.id}`"
+          class="group stagger-item album-glow"
+          :style="{ animationDelay: `${index * 20}ms` }"
+        >
+          <div class="relative">
+            <!-- Album Cover -->
+            <div class="aspect-square glass glass-hover relative overflow-hidden group-hover:scale-105 transition-all duration-300">
+              <!-- Neon border on hover -->
+              <div class="absolute inset-0 neon-glow opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-10"></div>
+              
+              <!-- Overlay -->
+              <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-20"></div>
+              
+              <!-- Play Button -->
+              <div class="absolute inset-0 flex items-center justify-center z-30 opacity-0 group-hover:opacity-100 transition-all duration-300">
+                <div class="glass w-12 h-12 flex items-center justify-center neon-glow group-hover:scale-110 transition-transform duration-300">
+                  <svg class="w-5 h-5 text-cyan-400 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M8 5v14l11-7z"/>
+                  </svg>
+                </div>
+              </div>
+
+              <img
+                v-if="record.release.coverUrl || record.release.thumbUrl"
+                :src="record.release.coverUrl || record.release.thumbUrl"
+                :alt="record.release.title"
+                class="w-full h-full object-cover transition-transform duration-500"
+                loading="lazy"
+              />
+              <div v-else class="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-900">
+                <svg class="w-8 h-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
+                </svg>
+              </div>
+            </div>
+            
+            <!-- Record Info -->
+            <div class="mt-2 space-y-1 group-hover:translate-y-[-1px] transition-transform duration-300">
+              <p class="font-semibold text-xs group-hover:text-cyan-400 transition-colors duration-200 truncate leading-tight" style="color: var(--text-primary);">
+                {{ record.release.artist || 'Unknown Artist' }}
+              </p>
+              <p class="text-xs truncate leading-tight" style="color: var(--text-secondary);">
+                {{ record.release.title }}
+              </p>
+              <div class="flex items-center gap-1 text-xs">
+                <span v-if="record.release.year" class="font-mono neon-pink text-xs">
+                  {{ record.release.year }}
+                </span>
+                <div v-if="record.release.year && record.release.formats?.length" class="w-0.5 h-0.5 bg-purple-500 rounded-full opacity-60"></div>
+                <span v-if="record.release.formats?.length" class="text-xs" style="color: var(--text-tertiary);">
+                  {{ record.release.formats[0] }}
+                </span>
+              </div>
+            </div>
           </div>
         </NuxtLink>
       </div>
