@@ -32,3 +32,4 @@ build
 youtube-cookies.txt
 .vercel
 prisma/dev.db
+.vercel/
