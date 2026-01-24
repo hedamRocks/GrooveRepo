@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Generate Stack Icons</title>
+</head>
+<body>
+    <canvas id="canvas" width="512" height="512"></canvas>
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Black background
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, 512, 512);
+        
+        // Create gradient
+        const gradient = ctx.createLinearGradient(0, 0, 512, 512);
+        gradient.addColorStop(0, '#06B6D4');
+        gradient.addColorStop(1, '#9333EA');
+        
+        // Draw vinyl record circles
+        ctx.strokeStyle = gradient;
+        ctx.lineWidth = 8;
+        ctx.beginPath();
+        ctx.arc(256, 256, 180, 0, Math.PI * 2);
+        ctx.stroke();
+        
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(256, 256, 155, 0, Math.PI * 2);
+        ctx.stroke();
+        
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(256, 256, 130, 0, Math.PI * 2);
+        ctx.stroke();
+        
+        // Center circle
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(256, 256, 25, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Letter S
+        ctx.font = 'bold 140px Arial';
+        ctx.fillStyle = gradient;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('S', 256, 266);
+        
+        // Download as different sizes
+        console.log('Icon created! Right-click and save as PNG');
+        console.log('Then resize to: 192x192, 512x512, and 180x180 (for apple-touch-icon)');
+    </script>
+</body>
+</html>

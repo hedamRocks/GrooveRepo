@@ -14,13 +14,18 @@
     "db:studio": "prisma studio"
   },
   "dependencies": {
+    "@googleapis/youtube": "^30.3.0",
     "@prisma/client": "^5.22.0",
+    "essentia.js": "^0.1.3",
+    "music-tempo": "^1.0.3",
     "nuxt": "^3.14.0",
+    "oauth": "^0.10.0",
     "resend": "^4.0.0",
-    "oauth": "^0.10.0"
+    "string-similarity": "^4.0.4"
   },
   "devDependencies": {
     "@nuxtjs/tailwindcss": "^6.12.0",
+    "@vite-pwa/nuxt": "^1.1.0",
     "prisma": "^5.22.0",
     "typescript": "^5.7.2",
     "vue": "^3.5.13",

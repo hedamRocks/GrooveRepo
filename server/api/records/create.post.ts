@@ -1,3 +1,5 @@
+import { getDiscogsClient } from '~/server/utils/discogs-client'
+
 /**
  * Manually add a record via Discogs release ID
  */

@@ -114,6 +114,130 @@ async function removeFromShelf(shelfId: string) {
   }
 }
 
+// Track analysis
+const isAnalyzingTracks = ref(false)
+const analyzingTrackId = ref<string | null>(null)
+const analysisJobId = ref<string | null>(null)
+const analysisProgress = ref(0)
+
+// Track editing
+const editingTrackId = ref<string | null>(null)
+const editingBpm = ref<number | null>(null)
+
+function startEditBpm(track: any) {
+  editingTrackId.value = track.id
+  editingBpm.value = track.bpm
+}
+
+async function saveTrackBpm(trackId: string) {
+  if (!editingBpm.value) return
+
+  try {
+    await $fetch(`/api/tracks/${trackId}/metadata`, {
+      method: 'PATCH',
+      body: { bpm: editingBpm.value }
+    })
+
+    // Refresh record to show updated BPM
+    await fetchRecord()
+
+    // Clear editing state
+    editingTrackId.value = null
+    editingBpm.value = null
+  } catch (error: any) {
+    alert(error.data?.message || 'Failed to update BPM')
+  }
+}
+
+function cancelEditBpm() {
+  editingTrackId.value = null
+  editingBpm.value = null
+}
+
+async function analyzeAllTracks() {
+  if (!record.value?.tracks?.length) return
+
+  if (!confirm(`Analyze DJ metadata (BPM, key, energy) for all ${record.value.tracks.length} tracks? This will take ~${Math.ceil(record.value.tracks.length * 15 / 60)} minutes.`)) {
+    return
+  }
+
+  isAnalyzingTracks.value = true
+  try {
+    const trackIds = record.value.tracks.map((t: any) => t.id)
+
+    const response = await $fetch<{
+      jobId: string
+      status: string
+      totalTracks: number
+    }>('/api/analysis/start', {
+      method: 'POST',
+      body: { trackIds }
+    })
+
+    analysisJobId.value = response.jobId
+
+    // Start polling for progress
+    pollAnalysisProgress()
+  } catch (error: any) {
+    alert(error.data?.message || 'Failed to start track analysis')
+    isAnalyzingTracks.value = false
+  }
+}
+
+async function analyzeSingleTrack(trackId: string) {
+  analyzingTrackId.value = trackId
+  try {
+    const response = await $fetch<{
+      jobId: string
+      status: string
+    }>('/api/analysis/start', {
+      method: 'POST',
+      body: { trackIds: [trackId] }
+    })
+
+    analysisJobId.value = response.jobId
+    pollAnalysisProgress()
+  } catch (error: any) {
+    alert(error.data?.message || 'Failed to start track analysis')
+    analyzingTrackId.value = null
+  }
+}
+
+async function pollAnalysisProgress() {
+  if (!analysisJobId.value) return
+
+  const interval = setInterval(async () => {
+    try {
+      const status = await $fetch<{
+        status: string
+        progress: number
+        processed: number
+        failed: number
+        errorMessage?: string
+      }>(`/api/analysis/${analysisJobId.value}`)
+
+      analysisProgress.value = status.progress
+
+      if (status.status === 'completed') {
+        clearInterval(interval)
+        isAnalyzingTracks.value = false
+        analyzingTrackId.value = null
+        await fetchRecord() // Reload to show updated metadata
+        analysisJobId.value = null
+        alert(`Analysis complete! ${status.processed} tracks analyzed, ${status.failed} failed.`)
+      } else if (status.status === 'failed') {
+        clearInterval(interval)
+        isAnalyzingTracks.value = false
+        analyzingTrackId.value = null
+        alert(`Analysis failed: ${status.errorMessage}`)
+        analysisJobId.value = null
+      }
+    } catch (error) {
+      console.error('Failed to poll analysis status:', error)
+    }
+  }, 3000) // Poll every 3 seconds
+}
+
 onMounted(() => {
   fetchRecord()
   fetchShelves()
@@ -273,18 +397,93 @@ onMounted(() => {
             </div>
 
             <!-- Tracklist -->
-            <div v-if="record.release.discogsData?.tracklist?.length" class="mb-8 pb-8 border-b border-gray-200">
-              <h3 class="text-sm font-semibold text-gray-700 mb-3">Tracklist</h3>
-              <div class="space-y-2">
-                <div
-                  v-for="(track, index) in record.release.discogsData.tracklist"
-                  :key="index"
-                  class="flex gap-3 text-sm"
+            <div v-if="record.tracks?.length" class="mb-8 pb-8 border-b border-gray-200 animate-slide-up" style="animation-delay: 0.2s;">
+              <div class="flex items-center justify-between mb-4">
+                <h3 class="text-sm font-semibold text-gray-700">Tracklist</h3>
+                <button
+                  @click="analyzeAllTracks"
+                  :disabled="isAnalyzingTracks"
+                  class="text-xs text-purple-600 hover:text-purple-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <span class="text-gray-500 font-mono w-8 flex-shrink-0">{{ track.position || (index + 1) }}</span>
+                  {{ isAnalyzingTracks ? `Analyzing... ${analysisProgress}%` : 'Analyze All Tracks' }}
+                </button>
+              </div>
+              <div class="space-y-1">
+                <div
+                  v-for="track in record.tracks"
+                  :key="track.id"
+                  class="flex items-center gap-3 px-3 py-2 hover:bg-gray-50 rounded-lg transition-colors group"
+                >
+                  <!-- Position -->
+                  <span class="text-gray-500 font-mono text-xs w-8 flex-shrink-0 font-semibold">
+                    {{ track.position }}
+                  </span>
+
+                  <!-- Title & Duration -->
                   <div class="flex-1 min-w-0">
-                    <p class="text-gray-900 truncate">{{ track.title }}</p>
+                    <p class="text-sm text-gray-900 truncate font-medium">{{ track.title }}</p>
                     <p v-if="track.duration" class="text-xs text-gray-500">{{ track.duration }}</p>
+                  </div>
+
+                  <!-- DJ Metadata -->
+                  <div class="flex items-center gap-2">
+                    <!-- BPM - editable -->
+                    <div v-if="track.bpm" class="inline-flex items-center gap-1">
+                      <div v-if="editingTrackId === track.id" class="flex items-center gap-1">
+                        <input
+                          v-model.number="editingBpm"
+                          type="number"
+                          min="20"
+                          max="300"
+                          class="w-16 px-2 py-1 text-xs font-mono border border-purple-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
+                          @keyup.enter="saveTrackBpm(track.id)"
+                          @keyup.esc="cancelEditBpm"
+                        />
+                        <button
+                          @click="saveTrackBpm(track.id)"
+                          class="px-2 py-1 text-xs bg-purple-600 text-white rounded hover:bg-purple-700"
+                        >
+                          ✓
+                        </button>
+                        <button
+                          @click="cancelEditBpm"
+                          class="px-2 py-1 text-xs bg-gray-300 text-gray-700 rounded hover:bg-gray-400"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      <span
+                        v-else
+                        @click="startEditBpm(track)"
+                        class="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-mono bg-purple-100 text-purple-700 border border-purple-200 cursor-pointer hover:bg-purple-200 transition-colors"
+                        title="Click to edit BPM"
+                      >
+                        <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                        </svg>
+                        {{ track.bpm }}
+                      </span>
+                    </div>
+                    <span v-if="track.key" class="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-mono bg-cyan-100 text-cyan-700 border border-cyan-200">
+                      <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+                      </svg>
+                      {{ track.key }}
+                    </span>
+                    <span v-if="track.energy" class="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-mono bg-pink-100 text-pink-700 border border-pink-200">
+                      <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M13 2.05v3.03c3.39.49 6 3.39 6 6.92 0 .9-.18 1.75-.48 2.54l2.6 1.53c.56-1.24.88-2.62.88-4.07 0-5.18-3.95-9.45-9-9.95zM12 19c-3.87 0-7-3.13-7-7 0-3.53 2.61-6.43 6-6.92V2.05c-5.06.5-9 4.76-9 9.95 0 5.52 4.47 10 9.99 10 3.31 0 6.24-1.61 8.06-4.09l-2.6-1.53C16.17 17.98 14.21 19 12 19z"/>
+                      </svg>
+                      {{ track.energy }}/10
+                    </span>
+                    <button
+                      v-if="!track.bpm"
+                      @click="analyzeSingleTrack(track.id)"
+                      :disabled="analyzingTrackId === track.id"
+                      class="opacity-0 group-hover:opacity-100 text-xs text-purple-600 hover:text-purple-700 font-medium transition-opacity disabled:opacity-50"
+                    >
+                      {{ analyzingTrackId === track.id ? 'Analyzing...' : 'Analyze' }}
+                    </button>
                   </div>
                 </div>
               </div>

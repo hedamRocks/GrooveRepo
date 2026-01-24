@@ -29,3 +29,6 @@ prisma/migrations/**/*.sql
 
 # Build
 build
+youtube-cookies.txt
+.vercel
+prisma/dev.db

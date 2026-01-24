@@ -1,3 +1,5 @@
+import { getDiscogsClient } from '~/server/utils/discogs-client'
+
 /**
  * Refresh metadata for existing records
  * Fetches full release details from Discogs to populate missing fields

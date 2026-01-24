@@ -295,6 +295,17 @@
     animation: staggerIn 0.6s ease-out forwards;
   }
 
+  /* Form styling */
+  .glass-input {
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+
+  .glass-input:focus {
+    border-color: var(--neon-blue);
+    box-shadow: 0 0 20px rgba(0, 245, 255, 0.3);
+  }
+
   /* Dark theme background patterns */
   .bg-dots {
     background-image: radial-gradient(circle, rgba(255, 255, 255, 0.1) 1px, transparent 1px);

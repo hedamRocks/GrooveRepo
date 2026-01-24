@@ -1,3 +1,5 @@
+import { getDiscogsClient } from '~/server/utils/discogs-client'
+
 /**
  * Get all versions of a master release from Discogs
  * Allows users to see all pressings/versions when adding records

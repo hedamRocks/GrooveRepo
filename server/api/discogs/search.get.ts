@@ -1,3 +1,5 @@
+import { getDiscogsClient } from '~/server/utils/discogs-client'
+
 /**
  * Search Discogs for releases (manual add feature)
  * Requires authenticated user with Discogs token

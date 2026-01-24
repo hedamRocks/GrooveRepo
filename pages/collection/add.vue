@@ -123,13 +123,14 @@ function formatVersionDetails(version: any): string {
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-50">
+  <div class="min-h-screen" style="background: var(--bg-primary);">
     <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <!-- Header -->
       <div class="mb-8">
         <button
           @click="router.back()"
-          class="flex items-center text-gray-600 hover:text-gray-900 mb-4 transition"
+          class="flex items-center glass-hover mb-4 transition-all duration-200 px-3 py-2"
+          style="color: var(--text-secondary);"
         >
           <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
@@ -137,28 +138,27 @@ function formatVersionDetails(version: any): string {
           Back to collection
         </button>
 
-        <h1 class="text-3xl font-bold text-gray-900 mb-2">Add a Record</h1>
-        <p class="text-gray-600">Search Discogs to add a record to your collection</p>
+        <h1 class="text-3xl font-bold gradient-text mb-2">Add a Record</h1>
+        <p style="color: var(--text-secondary);">Search Discogs to add a record to your collection</p>
       </div>
 
       <!-- Search Box -->
-      <div class="bg-white rounded-xl shadow-lg p-6 mb-8">
-        <div class="relative">
-          <input
-            v-model="searchQuery"
-            type="text"
-            placeholder="Search for artist, album, or label..."
-            class="w-full px-4 py-3 pl-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
-          />
-          <svg
-            class="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-          </svg>
-        </div>
+      <div class="relative">
+        <input
+          v-model="searchQuery"
+          type="text"
+          placeholder="Search for artist, album, or label..."
+          class="w-full px-4 py-3 pl-12 border border-purple-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
+          style="background: var(--bg-secondary); box-shadow: var(--shadow-glass);"
+        />
+        <svg
+          class="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+        </svg>
       </div>
 
       <!-- Loading -->

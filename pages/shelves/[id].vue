@@ -52,16 +52,93 @@ async function removeRecord(recordId: string) {
   }
 }
 
+// DJ Metadata Analysis for this setlist
+const isAnalyzing = ref(false)
+const analysisJobId = ref<string | null>(null)
+const analysisProgress = ref(0)
+const analysisStatus = ref<string | null>(null)
+
+async function analyzeSetlistDJMetadata() {
+  if (!shelf.value || shelf.value.placements.length === 0) {
+    alert('This setlist is empty. Add some records first!')
+    return
+  }
+
+  if (!confirm(`Analyze DJ metadata (BPM, key, energy) for ${shelf.value.placements.length} tracks in this setlist? This will take ~${Math.ceil(shelf.value.placements.length * 15 / 60)} minutes.`)) {
+    return
+  }
+
+  isAnalyzing.value = true
+  try {
+    // Get all record IDs from this setlist
+    const recordIds = shelf.value.placements.map((p: any) => p.userRecord.id)
+
+    const response = await $fetch<{
+      jobId: string
+      status: string
+      totalTracks: number
+      message: string
+    }>('/api/analysis/start', {
+      method: 'POST',
+      body: { recordIds }
+    })
+
+    analysisJobId.value = response.jobId
+    analysisStatus.value = response.status
+
+    // Start polling for progress
+    pollAnalysisProgress()
+  } catch (error: any) {
+    alert(error.data?.message || 'Failed to start DJ metadata analysis')
+    isAnalyzing.value = false
+  }
+}
+
+async function pollAnalysisProgress() {
+  if (!analysisJobId.value) return
+
+  const interval = setInterval(async () => {
+    try {
+      const status = await $fetch<{
+        jobId: string
+        status: string
+        progress: number
+        processed: number
+        failed: number
+        errorMessage?: string
+      }>(`/api/analysis/${analysisJobId.value}`)
+
+      analysisProgress.value = status.progress
+      analysisStatus.value = status.status
+
+      if (status.status === 'completed') {
+        clearInterval(interval)
+        isAnalyzing.value = false
+        alert(`DJ metadata analysis complete! Analyzed ${status.processed} tracks, ${status.failed} failed.`)
+        await fetchShelf() // Reload setlist
+        analysisJobId.value = null
+      } else if (status.status === 'failed') {
+        clearInterval(interval)
+        isAnalyzing.value = false
+        alert(`Analysis failed: ${status.errorMessage}`)
+        analysisJobId.value = null
+      }
+    } catch (error) {
+      console.error('Failed to poll analysis status:', error)
+    }
+  }, 3000) // Poll every 3 seconds
+}
+
 onMounted(() => {
   fetchShelf()
 })
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-50">
+  <div class="min-h-screen" style="background: var(--bg-primary);">
     <!-- Loading -->
     <div v-if="isLoading" class="flex items-center justify-center min-h-screen">
-      <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
+      <div class="animate-spin rounded-full h-12 w-12 border-b-2" style="border-color: var(--neon-blue);"></div>
     </div>
 
     <!-- Shelf Content -->
@@ -70,7 +147,8 @@ onMounted(() => {
       <div class="mb-8">
         <button
           @click="router.push('/shelves')"
-          class="flex items-center text-gray-600 hover:text-gray-900 mb-4 transition"
+          class="flex items-center glass-hover mb-4 transition-all duration-200 px-3 py-2"
+          style="color: var(--text-secondary);"
         >
           <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
@@ -93,13 +171,26 @@ onMounted(() => {
             </div>
           </div>
 
-          <button
-            @click="deleteShelf"
-            :disabled="isDeleting"
-            class="text-red-600 hover:text-red-700 text-sm font-medium disabled:opacity-50"
-          >
-            {{ isDeleting ? 'Deleting...' : 'Delete Shelf' }}
-          </button>
+          <div class="flex items-center gap-3">
+            <button
+              v-if="shelf.placements.length > 0"
+              @click="analyzeSetlistDJMetadata"
+              :disabled="isAnalyzing"
+              class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              <svg class="w-4 h-4" :class="{ 'animate-spin': isAnalyzing }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
+              </svg>
+              {{ isAnalyzing ? `Analyzing... ${analysisProgress}%` : 'Analyze DJ Metadata' }}
+            </button>
+            <button
+              @click="deleteShelf"
+              :disabled="isDeleting"
+              class="text-red-600 hover:text-red-700 text-sm font-medium disabled:opacity-50"
+            >
+              {{ isDeleting ? 'Deleting...' : 'Delete Shelf' }}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -149,6 +240,28 @@ onMounted(() => {
                 {{ placement.userRecord.release.artist || 'Unknown Artist' }}
               </p>
               <p class="text-xs text-gray-600 truncate">{{ placement.userRecord.release.title }}</p>
+
+              <!-- DJ Metadata -->
+              <div v-if="placement.userRecord.bpm || placement.userRecord.key || placement.userRecord.energy" class="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                <span v-if="placement.userRecord.bpm" class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-mono bg-purple-100 text-purple-700 border border-purple-200">
+                  <svg class="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                  </svg>
+                  {{ placement.userRecord.bpm }}
+                </span>
+                <span v-if="placement.userRecord.key" class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-mono bg-cyan-100 text-cyan-700 border border-cyan-200">
+                  <svg class="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+                  </svg>
+                  {{ placement.userRecord.key }}
+                </span>
+                <span v-if="placement.userRecord.energy" class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-mono bg-pink-100 text-pink-700 border border-pink-200">
+                  <svg class="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M13 2.05v3.03c3.39.49 6 3.39 6 6.92 0 .9-.18 1.75-.48 2.54l2.6 1.53c.56-1.24.88-2.62.88-4.07 0-5.18-3.95-9.45-9-9.95zM12 19c-3.87 0-7-3.13-7-7 0-3.53 2.61-6.43 6-6.92V2.05c-5.06.5-9 4.76-9 9.95 0 5.52 4.47 10 9.99 10 3.31 0 6.24-1.61 8.06-4.09l-2.6-1.53C16.17 17.98 14.21 19 12 19z"/>
+                  </svg>
+                  {{ placement.userRecord.energy }}/10
+                </span>
+              </div>
             </div>
           </NuxtLink>
 

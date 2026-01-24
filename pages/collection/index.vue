@@ -8,8 +8,11 @@ import { navigateTo } from 'nuxt/app'
 const search = ref('')
 const searchDebounced = ref('')
 const isLoading = ref(true)
+const isLoadingMore = ref(false)
 const records = ref<any[]>([])
 const totalRecords = ref(0)
+const currentPage = ref(1)
+const hasMore = ref(true)
 const isSyncing = ref(false)
 
 // Filter state
@@ -51,17 +54,26 @@ watch(search, (newValue) => {
 
 // Fetch records when search or filters change
 watch([searchDebounced, filters], async () => {
-  await fetchRecords()
+  currentPage.value = 1
+  records.value = []
+  await fetchRecords(true)
 }, { immediate: true, deep: true })
 
-async function fetchRecords() {
-  isLoading.value = true
+async function fetchRecords(reset = false) {
+  if (reset) {
+    isLoading.value = true
+    currentPage.value = 1
+    records.value = []
+  } else {
+    isLoadingMore.value = true
+  }
+
   try {
     const params = new URLSearchParams()
     if (searchDebounced.value) {
       params.append('search', searchDebounced.value)
     }
-    
+
     // Add filter parameters
     if (filters.value.genres.length > 0) {
       params.append('genres', filters.value.genres.join(','))
@@ -81,21 +93,59 @@ async function fetchRecords() {
     if (filters.value.yearRange.max !== null) {
       params.append('yearMax', filters.value.yearRange.max.toString())
     }
-    
+
+    params.append('page', currentPage.value.toString())
     params.append('limit', '100')
 
     const response = await $fetch(`/api/records?${params}`)
-    records.value = response.records
+
+    if (reset) {
+      records.value = response.records
+    } else {
+      records.value = [...records.value, ...response.records]
+    }
+
     totalRecords.value = response.pagination.total
-    
+    hasMore.value = currentPage.value < response.pagination.totalPages
+
     // Update filter options based on available data
     updateFilterOptions(response.records)
   } catch (error) {
     console.error('Failed to fetch records:', error)
   } finally {
     isLoading.value = false
+    isLoadingMore.value = false
   }
 }
+
+// Infinite scroll
+function handleScroll() {
+  if (isLoadingMore.value || !hasMore.value) return
+
+  const scrollPosition = window.innerHeight + window.scrollY
+  const pageHeight = document.documentElement.scrollHeight
+
+  // Load more when within 500px of bottom
+  if (scrollPosition >= pageHeight - 500) {
+    loadMore()
+  }
+}
+
+async function loadMore() {
+  if (!hasMore.value || isLoadingMore.value) return
+
+  currentPage.value++
+  await fetchRecords(false)
+}
+
+// Setup scroll listener
+onMounted(() => {
+  window.addEventListener('scroll', handleScroll)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('scroll', handleScroll)
+})
 
 function updateFilterOptions(recordsData: any[]) {
   const genres = new Set<string>()
@@ -190,115 +240,125 @@ async function refreshMetadata() {
     isRefreshing.value = false
   }
 }
+
+// DJ Metadata Analysis
+const isAnalyzing = ref(false)
+const analysisJobId = ref<string | null>(null)
+const analysisProgress = ref(0)
+const analysisStatus = ref<string | null>(null)
+
+async function analyzeDJMetadata() {
+  if (!confirm('This will analyze all your records to extract BPM, key, and energy data from YouTube. This will take several hours for large collections. Continue?')) {
+    return
+  }
+
+  isAnalyzing.value = true
+  try {
+    const response = await $fetch<{
+      jobId: string
+      status: string
+      totalTracks: number
+      message: string
+    }>('/api/analysis/start', {
+      method: 'POST',
+      body: { analyzeAll: true }
+    })
+
+    analysisJobId.value = response.jobId
+    analysisStatus.value = response.status
+
+    // Start polling for progress
+    pollAnalysisProgress()
+  } catch (error: any) {
+    alert(error.data?.message || 'Failed to start DJ metadata analysis')
+    isAnalyzing.value = false
+  }
+}
+
+async function pollAnalysisProgress() {
+  if (!analysisJobId.value) return
+
+  const interval = setInterval(async () => {
+    try {
+      const status = await $fetch<{
+        jobId: string
+        status: string
+        progress: number
+        processed: number
+        failed: number
+        errorMessage?: string
+      }>(`/api/analysis/${analysisJobId.value}`)
+
+      analysisProgress.value = status.progress
+      analysisStatus.value = status.status
+
+      if (status.status === 'completed') {
+        clearInterval(interval)
+        isAnalyzing.value = false
+        alert(`DJ metadata analysis complete! Analyzed ${status.processed} tracks, ${status.failed} failed.`)
+        await fetchRecords() // Reload records
+        analysisJobId.value = null
+      } else if (status.status === 'failed') {
+        clearInterval(interval)
+        isAnalyzing.value = false
+        alert(`Analysis failed: ${status.errorMessage}`)
+        analysisJobId.value = null
+      }
+    } catch (error) {
+      console.error('Failed to poll analysis status:', error)
+    }
+  }, 3000) // Poll every 3 seconds
+}
 </script>
 
 <template>
-  <div class="min-h-screen bg-dots" style="background-color: var(--bg-primary);">
-    <!-- Mobile-First Header -->
+  <div class="min-h-screen bg-dots pb-32" style="background-color: var(--bg-primary);">
+    <!-- Compact Header -->
     <header class="glass sticky top-0 z-50 border-b" style="border-color: rgba(255, 255, 255, 0.1);">
-      <div class="relative px-4 py-3">
-        <!-- Top Row: Title + Actions -->
-        <div class="flex items-center justify-between mb-3">
-          <div>
-            <h1 class="text-2xl font-bold gradient-text">Collection</h1>
-            <div class="flex items-center gap-2 mt-1">
-              <span class="font-mono text-xs neon-text">{{ totalRecords }}</span>
-              <span class="text-xs" style="color: var(--text-tertiary);">records</span>
-              <div v-if="activeFiltersCount > 0" class="flex items-center gap-1 ml-2">
-                <div class="w-1 h-1 bg-cyan-400 rounded-full neon-glow"></div>
-                <span class="text-xs font-mono text-cyan-400">{{ activeFiltersCount }} filters</span>
-              </div>
-            </div>
-          </div>
+      <div class="relative px-4 py-2">
+        <!-- Top Row: Title + Filter -->
+        <div class="flex items-center justify-between mb-2">
           <div class="flex items-center gap-2">
-            <!-- Filter Button -->
-            <button 
-              @click="showFilters = true"
-              class="btn-secondary text-sm px-3 py-2 relative"
-              :class="{ 'neon-glow': activeFiltersCount > 0 }"
-            >
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.707A1 1 0 013 7V4z"></path>
-              </svg>
-              <div v-if="activeFiltersCount > 0" class="absolute -top-1 -right-1 w-3 h-3 bg-cyan-400 rounded-full flex items-center justify-center">
-                <span class="text-xs font-bold text-black">{{ activeFiltersCount }}</span>
-              </div>
-            </button>
-            <!-- Add Record Button - Primary Action -->
-            <NuxtLink to="/collection/add" class="btn-primary text-sm px-4 py-2">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"></path>
-              </svg>
-            </NuxtLink>
+            <h1 class="text-base font-bold gradient-text">Collection</h1>
+            <span class="font-mono text-xs neon-text">{{ totalRecords }}</span>
           </div>
+          <button
+            @click="showFilters = true"
+            class="btn-secondary text-sm px-3 py-1.5 relative"
+            :class="{ 'neon-glow': activeFiltersCount > 0 }"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.707A1 1 0 013 7V4z"></path>
+            </svg>
+            <div v-if="activeFiltersCount > 0" class="absolute -top-1 -right-1 w-3 h-3 bg-cyan-400 rounded-full flex items-center justify-center">
+              <span class="text-xs font-bold text-black">{{ activeFiltersCount }}</span>
+            </div>
+          </button>
         </div>
 
         <!-- Search Bar -->
-        <div class="mb-3">
-          <div class="glass glass-hover relative">
-            <input
-              v-model="search"
-              type="text"
-              placeholder="Search music..."
-              class="w-full bg-transparent px-4 py-3 pl-10 pr-10 text-base outline-none placeholder-gray-500"
-              style="color: var(--text-primary);"
-            />
-            <div class="absolute left-3 top-1/2 transform -translate-y-1/2">
-              <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-              </svg>
-            </div>
-            <button
-              v-if="search"
-              @click="clearSearch"
-              class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-red-400 transition-colors"
-            >
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"></path>
-              </svg>
-            </button>
+        <div class="glass glass-hover relative">
+          <input
+            v-model="search"
+            type="text"
+            placeholder="Search music..."
+            class="w-full bg-transparent px-4 py-2 pl-10 pr-10 text-sm outline-none placeholder-gray-500"
+            style="color: var(--text-primary);"
+          />
+          <div class="absolute left-3 top-1/2 transform -translate-y-1/2">
+            <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+            </svg>
           </div>
-        </div>
-
-        <!-- Action Buttons Row -->
-        <div class="flex gap-2 overflow-x-auto pb-1">
           <button
-            @click="syncDiscogs"
-            :disabled="isSyncing"
-            class="btn-secondary text-xs px-3 py-2 whitespace-nowrap flex-shrink-0"
-            :class="{ 'opacity-50 cursor-not-allowed': isSyncing }"
+            v-if="search"
+            @click="clearSearch"
+            class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-red-400 transition-colors"
           >
-            <svg class="w-3 h-3 mr-1.5" :class="{ 'animate-spin': isSyncing }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"></path>
             </svg>
-            {{ isSyncing ? 'Syncing...' : 'Sync' }}
           </button>
-          
-          <button
-            @click="refreshMetadata"
-            :disabled="isRefreshing"
-            class="btn-secondary text-xs px-3 py-2 whitespace-nowrap flex-shrink-0"
-            :class="{ 'opacity-50 cursor-not-allowed': isRefreshing }"
-          >
-            <svg class="w-3 h-3 mr-1.5" :class="{ 'animate-pulse': isRefreshing }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
-            </svg>
-            {{ isRefreshing ? 'Refreshing...' : 'Refresh' }}
-          </button>
-
-          <NuxtLink to="/shelves" class="btn-secondary text-xs px-3 py-2 whitespace-nowrap flex-shrink-0">
-            <svg class="w-3 h-3 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
-            </svg>
-            Shelves
-          </NuxtLink>
-
-          <NuxtLink to="/stats" class="btn-secondary text-xs px-3 py-2 whitespace-nowrap flex-shrink-0">
-            <svg class="w-3 h-3 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2h-2a2 2 0 00-2 2z"></path>
-            </svg>
-            Stats
-          </NuxtLink>
         </div>
       </div>
     </header>
@@ -666,10 +726,114 @@ async function refreshMetadata() {
                   {{ record.release.formats[0] }}
                 </span>
               </div>
+
+              <!-- DJ Metadata -->
+              <div v-if="record.bpm || record.key || record.energy" class="flex items-center gap-1.5 mt-1.5">
+                <span v-if="record.bpm" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                  <svg class="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                  </svg>
+                  {{ record.bpm }}
+                </span>
+                <span v-if="record.key" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                  <svg class="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+                  </svg>
+                  {{ record.key }}
+                </span>
+                <span v-if="record.energy" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-pink-500/20 text-pink-300 border border-pink-500/30">
+                  <svg class="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M13 2.05v3.03c3.39.49 6 3.39 6 6.92 0 .9-.18 1.75-.48 2.54l2.6 1.53c.56-1.24.88-2.62.88-4.07 0-5.18-3.95-9.45-9-9.95zM12 19c-3.87 0-7-3.13-7-7 0-3.53 2.61-6.43 6-6.92V2.05c-5.06.5-9 4.76-9 9.95 0 5.52 4.47 10 9.99 10 3.31 0 6.24-1.61 8.06-4.09l-2.6-1.53C16.17 17.98 14.21 19 12 19z"/>
+                  </svg>
+                  {{ record.energy }}/10
+                </span>
+              </div>
             </div>
           </div>
         </NuxtLink>
       </div>
+
+      <!-- Load More Indicator -->
+      <div v-if="isLoadingMore" class="flex items-center justify-center py-8">
+        <div class="text-center">
+          <div class="w-8 h-8 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+          <p class="text-sm text-gray-400">Loading more records...</p>
+        </div>
+      </div>
+
+      <!-- End of List Indicator -->
+      <div v-else-if="!hasMore && records.length > 0" class="flex items-center justify-center py-8">
+        <p class="text-sm text-gray-500">You've reached the end of your collection</p>
+      </div>
     </main>
+
+    <!-- Fixed Add Record Button -->
+    <div class="fixed bottom-16 left-0 right-0 z-40 p-4 bg-gradient-to-t from-black via-black/95 to-transparent pointer-events-none">
+      <div class="max-w-7xl mx-auto pointer-events-auto">
+        <NuxtLink
+          to="/collection/add"
+          class="w-full flex items-center justify-center gap-2 px-6 py-4 bg-gradient-to-r from-cyan-600 to-purple-600 text-white text-base font-semibold rounded-xl hover:from-cyan-500 hover:to-purple-500 transition-all shadow-xl neon-glow"
+          style="box-shadow: 0 0 20px rgba(6, 182, 212, 0.3);"
+        >
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"></path>
+          </svg>
+          Add Record
+        </NuxtLink>
+      </div>
+    </div>
+
+    <!-- Fixed Bottom Navigation -->
+    <nav class="fixed bottom-0 left-0 right-0 z-50 glass border-t" style="border-color: rgba(255, 255, 255, 0.1); background: var(--bg-secondary);">
+      <div class="flex items-center justify-around px-2 py-2">
+        <!-- Collection -->
+        <NuxtLink
+          to="/collection"
+          class="flex flex-col items-center gap-1 px-4 py-2 transition-colors group"
+          active-class="text-cyan-400"
+        >
+          <svg class="w-5 h-5 group-[.router-link-active]:neon-glow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+          </svg>
+          <span class="text-xs font-medium">Collection</span>
+        </NuxtLink>
+
+        <!-- Shelves -->
+        <NuxtLink
+          to="/shelves"
+          class="flex flex-col items-center gap-1 px-4 py-2 transition-colors group"
+          active-class="text-cyan-400"
+        >
+          <svg class="w-5 h-5 group-[.router-link-active]:neon-glow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"></path>
+          </svg>
+          <span class="text-xs font-medium">Shelves</span>
+        </NuxtLink>
+
+        <!-- Setlists -->
+        <NuxtLink
+          to="/setlists"
+          class="flex flex-col items-center gap-1 px-4 py-2 transition-colors group"
+          active-class="text-cyan-400"
+        >
+          <svg class="w-5 h-5 group-[.router-link-active]:neon-glow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
+          </svg>
+          <span class="text-xs font-medium">Setlists</span>
+        </NuxtLink>
+
+        <!-- Stats -->
+        <NuxtLink
+          to="/stats"
+          class="flex flex-col items-center gap-1 px-4 py-2 transition-colors group"
+          active-class="text-cyan-400"
+        >
+          <svg class="w-5 h-5 group-[.router-link-active]:neon-glow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+          </svg>
+          <span class="text-xs font-medium">Stats</span>
+        </NuxtLink>
+      </div>
+    </nav>
   </div>
 </template>

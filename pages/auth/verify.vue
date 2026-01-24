@@ -39,28 +39,28 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-gradient-to-br from-purple-50 to-indigo-100 flex items-center justify-center p-4">
+  <div class="min-h-screen flex items-center justify-center p-4" style="background: var(--bg-primary);">
     <div class="max-w-md w-full">
-      <div class="bg-white rounded-2xl shadow-xl p-8 text-center">
+      <div class="glass p-8 text-center" style="background: var(--bg-secondary); box-shadow: var(--shadow-glass);">
         <!-- Verifying State -->
         <div v-if="isVerifying">
-          <div class="animate-spin rounded-full h-16 w-16 border-b-2 border-purple-600 mx-auto mb-4"></div>
-          <h2 class="text-2xl font-semibold text-gray-900 mb-2">Verifying...</h2>
-          <p class="text-gray-600">Please wait while we sign you in</p>
+          <div class="animate-spin rounded-full h-16 w-16 border-b-2 mx-auto mb-4" style="border-color: var(--neon-blue);"></div>
+          <h2 class="text-2xl font-semibold mb-2" style="color: var(--text-primary);">Verifying...</h2>
+          <p style="color: var(--text-secondary);">Please wait while we sign you in</p>
         </div>
 
         <!-- Error State -->
         <div v-else-if="error">
-          <div class="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg class="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div class="w-16 h-16 glass rounded-full flex items-center justify-center mx-auto mb-4" style="background: var(--bg-glass);">
+            <svg class="w-8 h-8 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
             </svg>
           </div>
-          <h2 class="text-2xl font-semibold text-gray-900 mb-2">Verification Failed</h2>
-          <p class="text-gray-600 mb-6">{{ error }}</p>
+          <h2 class="text-2xl font-semibold mb-2" style="color: var(--text-primary);">Verification Failed</h2>
+          <p class="mb-6" style="color: var(--text-secondary);">{{ error }}</p>
           <NuxtLink
             to="/auth/login"
-            class="inline-block bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-semibold py-3 px-6 rounded-lg hover:from-purple-700 hover:to-indigo-700 transition"
+            class="btn-primary inline-block py-3 px-6"
           >
             Back to login
           </NuxtLink>

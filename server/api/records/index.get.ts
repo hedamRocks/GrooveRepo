@@ -29,19 +29,50 @@ export default defineEventHandler(async (event) => {
     const page = parseInt(query.page as string) || 1
     const limit = parseInt(query.limit as string) || 50
 
-    // Build where clause for search
+    // Filter parameters
+    const genres = query.genres ? (query.genres as string).split(',') : []
+    const styles = query.styles ? (query.styles as string).split(',') : []
+    const countries = query.countries ? (query.countries as string).split(',') : []
+    const labels = query.labels ? (query.labels as string).split(',') : []
+    const yearMin = query.yearMin ? parseInt(query.yearMin as string) : null
+    const yearMax = query.yearMax ? parseInt(query.yearMax as string) : null
+
+    // Build where clause for search and filters
     const where: any = {
       userId: user.id
     }
 
+    const releaseFilters: any = {}
+
     if (search.trim()) {
-      where.release = {
-        OR: [
-          { artist: { contains: search, mode: 'insensitive' } },
-          { title: { contains: search, mode: 'insensitive' } },
-          { label: { contains: search, mode: 'insensitive' } },
-        ]
-      }
+      releaseFilters.OR = [
+        { artist: { contains: search, mode: 'insensitive' } },
+        { title: { contains: search, mode: 'insensitive' } },
+        { label: { contains: search, mode: 'insensitive' } },
+      ]
+    }
+
+    // Apply filters
+    if (genres.length > 0) {
+      releaseFilters.genres = { hasSome: genres }
+    }
+    if (styles.length > 0) {
+      releaseFilters.styles = { hasSome: styles }
+    }
+    if (countries.length > 0) {
+      releaseFilters.country = { in: countries }
+    }
+    if (labels.length > 0) {
+      releaseFilters.label = { in: labels }
+    }
+    if (yearMin !== null || yearMax !== null) {
+      releaseFilters.year = {}
+      if (yearMin !== null) releaseFilters.year.gte = yearMin
+      if (yearMax !== null) releaseFilters.year.lte = yearMax
+    }
+
+    if (Object.keys(releaseFilters).length > 0) {
+      where.release = releaseFilters
     }
 
     // Get total count

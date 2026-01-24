@@ -32,23 +32,23 @@ async function sendMagicLink() {
 </script>
 
 <template>
-  <div class="min-h-screen bg-gradient-to-br from-purple-50 to-indigo-100 flex items-center justify-center p-4">
+  <div class="min-h-screen flex items-center justify-center p-4" style="background: var(--bg-primary);">
     <div class="max-w-md w-full">
       <!-- Header -->
       <div class="text-center mb-8">
-        <h1 class="text-4xl font-bold text-gray-900 mb-2">Welcome</h1>
-        <p class="text-gray-600">Your visual vinyl collection</p>
+        <h1 class="text-4xl font-bold gradient-text mb-2">Welcome</h1>
+        <p style="color: var(--text-secondary);">Your visual vinyl collection</p>
       </div>
 
       <!-- Login Card -->
-      <div class="bg-white rounded-2xl shadow-xl p-8">
+      <div class="glass p-8" style="background: var(--bg-secondary); box-shadow: var(--shadow-glass);">
         <div v-if="!isSuccess">
-          <h2 class="text-2xl font-semibold text-gray-900 mb-2">Sign in</h2>
-          <p class="text-gray-600 mb-6">Enter your email to receive a magic link</p>
+          <h2 class="text-2xl font-semibold mb-2" style="color: var(--text-primary);">Sign in</h2>
+          <p class="mb-6" style="color: var(--text-secondary);">Enter your email to receive a magic link</p>
 
           <form @submit.prevent="sendMagicLink" class="space-y-4">
             <div>
-              <label for="email" class="block text-sm font-medium text-gray-700 mb-2">
+              <label for="email" class="block text-sm font-medium mb-2" style="color: var(--text-secondary);">
                 Email address
               </label>
               <input
@@ -56,7 +56,8 @@ async function sendMagicLink() {
                 v-model="email"
                 type="email"
                 required
-                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition"
+                class="w-full px-4 py-3 border glass-input transition-all duration-200 outline-none"
+                style="background: var(--bg-tertiary); border-color: var(--border-glass); color: var(--text-primary);"
                 placeholder="you@example.com"
               />
             </div>
@@ -64,33 +65,34 @@ async function sendMagicLink() {
             <button
               type="submit"
               :disabled="isLoading || !email"
-              class="w-full bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-semibold py-3 px-4 rounded-lg hover:from-purple-700 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
+              class="btn-primary w-full py-3 font-semibold"
+              :class="{ 'opacity-50 cursor-not-allowed': isLoading || !email }"
             >
               <span v-if="isLoading">Sending...</span>
               <span v-else>Send magic link</span>
             </button>
           </form>
 
-          <p v-if="message && !isSuccess" class="mt-4 text-sm text-red-600">
+          <p v-if="message && !isSuccess" class="mt-4 text-sm text-red-400">
             {{ message }}
           </p>
         </div>
 
         <!-- Success State -->
         <div v-else class="text-center py-4">
-          <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg class="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div class="w-16 h-16 glass rounded-full flex items-center justify-center mx-auto mb-4" style="background: var(--bg-glass);">
+            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color: var(--neon-green);">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
             </svg>
           </div>
-          <h3 class="text-xl font-semibold text-gray-900 mb-2">Check your email</h3>
-          <p class="text-gray-600 mb-4">{{ message }}</p>
-          <p class="text-sm text-gray-500">The link will expire in 15 minutes</p>
+          <h3 class="text-xl font-semibold mb-2" style="color: var(--text-primary);">Check your email</h3>
+          <p class="mb-4" style="color: var(--text-secondary);">{{ message }}</p>
+          <p class="text-sm" style="color: var(--text-tertiary);">The link will expire in 15 minutes</p>
         </div>
       </div>
 
       <!-- Footer -->
-      <p class="text-center text-sm text-gray-600 mt-6">
+      <p class="text-center text-sm mt-6" style="color: var(--text-secondary);">
         No passwords. No tracking. Just your collection.
       </p>
     </div>

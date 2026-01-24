@@ -1,3 +1,5 @@
+import { getDiscogsClient } from '~/server/utils/discogs-client'
+
 /**
  * Refresh metadata for ALL records by fetching full release details from Discogs
  * This is a heavy operation that should be run infrequently
@@ -25,13 +27,13 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    // Only get records that haven't been refreshed yet (no discogsData or missing community data)
+    // Only get records that haven't been refreshed yet (missing community data)
+    // Note: Removed discogsData check due to Prisma JSON field limitations
     const userRecords = await prisma.userRecord.findMany({
       where: {
         userId: user.id,
         release: {
           OR: [
-            { discogsData: null },
             { communityHave: null },
             { communityWant: null }
           ]

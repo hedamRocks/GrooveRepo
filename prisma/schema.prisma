@@ -28,9 +28,12 @@ model User {
   lastImportStatus String? // "pending" | "in_progress" | "completed" | "failed"
 
   // Relations
-  records        UserRecord[]
-  shelves        Shelf[]
+  records         UserRecord[]
+  shelves         Shelf[]
   magicLinkTokens MagicLinkToken[]
+  analysisJobs    AnalysisJob[]
+  tags            Tag[]
+  setlists        Setlist[]
 
   @@index([email])
 }
@@ -90,7 +93,7 @@ model Release {
   updatedAt DateTime @updatedAt
 
   // Relations
-  userRecords UserRecord[]
+  userRecords    UserRecord[]
 
   @@index([discogsId])
   @@index([artist]) // For search
@@ -124,11 +127,7 @@ model UserRecord {
   addedToDiscogsAt DateTime? // When they added it to Discogs
   instanceId       Int? // Discogs collection instance ID (for sync/update)
 
-  // Future-proofing for DJ features (not used in V1)
-  // These columns exist but aren't exposed in UI yet
-  bpm     Int?
-  key     String?
-  energy  Int? // 1-10 scale
+  // Tags for custom organization
   tags    String[] // For future custom tagging
 
   // Timestamps
@@ -137,10 +136,53 @@ model UserRecord {
 
   // Relations
   shelfPlacements ShelfPlacement[]
+  tracks          Track[]
 
   @@unique([userId, releaseId]) // User can only own a release once
   @@index([userId])
   @@index([addedAt]) // For "recently added" views
+}
+
+// ==========================================
+// TRACKS
+// ==========================================
+// Individual tracks on a record (A1, A2, B1, B2, etc.)
+// DJ metadata lives here since each track has unique BPM/key/energy
+
+model Track {
+  id String @id // Format: {userRecordId}_{position} (e.g. "rec_abc123_A1")
+
+  userRecordId String
+  userRecord   UserRecord @relation(fields: [userRecordId], references: [id], onDelete: Cascade)
+
+  // Track identity
+  position String  // e.g. "A1", "A2", "B1", "B2"
+  title    String  // Track title
+  duration String? // Duration string (e.g. "4:23")
+
+  // DJ Metadata (analyzed per-track)
+  bpm        Int?
+  key        String? // e.g. "D minor", "C major"
+  energy     Int?    // 0-10 scale
+  confidence Float?  // 0.0-1.0 analysis confidence
+
+  // YouTube source for analysis
+  youtubeId    String?
+  youtubeTitle String?
+
+  // Timestamps
+  analyzedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  // Relations
+  trackTags      TrackTag[]
+  setlistTracks  SetlistTrack[]
+
+  @@unique([userRecordId, position]) // Each track position unique per record
+  @@index([userRecordId])
+  @@index([bpm]) // For BPM filtering/sorting
+  @@index([key]) // For key filtering
 }
 
 // ==========================================
@@ -215,4 +257,128 @@ model ImportJob {
   @@index([userId])
   @@index([status])
   @@index([createdAt])
+}
+
+// ==========================================
+// DJ METADATA ANALYSIS
+// ==========================================
+
+model AnalysisJob {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Job configuration
+  type         String   // "full_library" | "selected_records" | "selected_tracks"
+  recordIds    String[] // If type = "selected_records"
+  trackIds     String[] // If type = "selected_tracks"
+
+  // Status tracking
+  status       String   // "pending" | "in_progress" | "completed" | "failed"
+  totalTracks  Int      @default(0)
+  processed    Int      @default(0)
+  failed       Int      @default(0)
+
+  // Error handling
+  errorMessage String?
+  errors       Json?    // Array of { trackId, error, timestamp }
+
+  // Timestamps
+  startedAt    DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// ==========================================
+// CUSTOM TAGS
+// ==========================================
+// User-defined tags for organizing tracks
+
+model Tag {
+  id          String   @id @default(cuid())
+  name        String
+  color       String? // Hex color for visual distinction
+  description String?
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  trackTags TrackTag[]
+
+  @@unique([userId, name]) // Tag names must be unique per user
+  @@index([userId])
+}
+
+// Join table: Many-to-many between Tracks and Tags
+model TrackTag {
+  id String @id @default(cuid())
+
+  trackId String
+  track   Track  @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  tagId String
+  tag   Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  addedAt DateTime @default(now())
+
+  @@unique([trackId, tagId]) // Can't add same tag to same track twice
+  @@index([trackId])
+  @@index([tagId])
+}
+
+// ==========================================
+// SETLISTS
+// ==========================================
+// DJ setlists/playlists with ordered tracks
+
+model Setlist {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  venue       String? // Where this setlist was/will be played
+  date        DateTime? // Event date
+  duration    Int? // Total duration in seconds
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  tracks SetlistTrack[]
+
+  @@index([userId])
+  @@index([date])
+}
+
+// Join table: Tracks in setlists with ordering
+model SetlistTrack {
+  id String @id @default(cuid())
+
+  setlistId String
+  setlist   Setlist @relation(fields: [setlistId], references: [id], onDelete: Cascade)
+
+  trackId String
+  track   Track  @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  // Ordering and manual overrides
+  sortOrder  Int // Position in setlist (0-indexed)
+  manualBpm  Int? // Manual BPM override for this track
+  notes      String? // Per-setlist track notes
+
+  addedAt DateTime @default(now())
+
+  @@unique([setlistId, trackId]) // Can't add same track to same setlist twice
+  @@unique([setlistId, sortOrder]) // Each position unique per setlist
+  @@index([setlistId])
+  @@index([trackId])
 }

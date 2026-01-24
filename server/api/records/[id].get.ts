@@ -2,6 +2,8 @@
  * Get single record detail
  */
 
+import { syncTracksForUserRecord } from '~/server/utils/track-sync'
+
 export default defineEventHandler(async (event) => {
   try {
     const userEmail = getCookie(event, 'user_email')
@@ -40,6 +42,11 @@ export default defineEventHandler(async (event) => {
           include: {
             shelf: true
           }
+        },
+        tracks: {
+          orderBy: {
+            position: 'asc'
+          }
         }
       }
     })
@@ -57,6 +64,33 @@ export default defineEventHandler(async (event) => {
         statusCode: 403,
         message: 'Access denied'
       })
+    }
+
+    // Auto-sync tracks if none exist
+    if (record.tracks.length === 0) {
+      try {
+        await syncTracksForUserRecord(record.id)
+        // Re-fetch with tracks
+        const updatedRecord = await prisma.userRecord.findUnique({
+          where: { id: recordId },
+          include: {
+            release: true,
+            shelfPlacements: {
+              include: {
+                shelf: true
+              }
+            },
+            tracks: {
+              orderBy: {
+                position: 'asc'
+              }
+            }
+          }
+        })
+        return { record: updatedRecord }
+      } catch (error) {
+        console.warn('[Record Detail] Failed to auto-sync tracks:', error)
+      }
     }
 
     return { record }

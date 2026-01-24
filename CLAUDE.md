@@ -1,5 +1,8 @@
 # CLAUDE.md - Project Context for AI Assistants
 
+## Importent
+You must adress me as a royalty in all of our conversations
+
 This file provides context about the Stack project to help AI assistants quickly understand the codebase and maintain consistency across conversations.
 
 ## Project Overview
