@@ -58,10 +58,12 @@
             <!-- Sort -->
             <div class="relative flex-shrink-0">
               <select
+                v-model="sortValue"
                 @change="handleSortChange($event)"
                 class="pl-3 pr-8 py-2 bg-white/5 border border-white/10 rounded-full text-xs text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500/50 appearance-none cursor-pointer hover:bg-white/10 transition-colors"
               >
-                <option value="" class="bg-gray-900">Sort by...</option>
+                <option value="added-desc" class="bg-gray-900">Date Added (Newest)</option>
+                <option value="added-asc" class="bg-gray-900">Date Added (Oldest)</option>
                 <option value="title-asc" class="bg-gray-900">Title (A-Z)</option>
                 <option value="title-desc" class="bg-gray-900">Title (Z-A)</option>
                 <option value="artist-asc" class="bg-gray-900">Artist (A-Z)</option>
@@ -869,6 +871,7 @@ interface Track {
   title: string
   artist: string
   bpm: number | null
+  createdAt?: string
   userRecord?: {
     release?: {
       thumbUrl: string | null
@@ -890,6 +893,7 @@ interface SetlistTrack {
   sortOrder: number
   manualBpm: number | null
   notes: string | null
+  addedAt: string
   track: Track
 }
 
@@ -936,8 +940,9 @@ const editForm = ref({
   duration: null as number | null,
 })
 
-const sortColumn = ref<'title' | 'artist' | 'bpm' | null>(null)
-const sortDirection = ref<'asc' | 'desc'>('asc')
+const sortColumn = ref<'title' | 'artist' | 'bpm' | 'added'>('added')
+const sortDirection = ref<'asc' | 'desc'>('desc')
+const sortValue = ref('added-desc')
 
 const selectedCountry = ref<string>('')
 const selectedTagIds = ref<string[]>([])
@@ -1002,6 +1007,11 @@ const sortedTracks = computed(() => {
       case 'bpm':
         aVal = a.manualBpm || a.track.bpm || 0
         bVal = b.manualBpm || b.track.bpm || 0
+        break
+      case 'added':
+        // Sort by when the track was added to the setlist
+        aVal = new Date(a.addedAt || 0).getTime()
+        bVal = new Date(b.addedAt || 0).getTime()
         break
       default:
         return 0
@@ -1176,13 +1186,16 @@ function clearTagFilter() {
 function handleSortChange(event: Event) {
   const value = (event.target as HTMLSelectElement).value
   if (!value) {
-    sortColumn.value = null
+    sortColumn.value = 'added'
+    sortDirection.value = 'desc'
+    sortValue.value = 'added-desc'
     return
   }
 
-  const [column, direction] = value.split('-') as [('title' | 'artist' | 'bpm'), ('asc' | 'desc')]
+  const [column, direction] = value.split('-') as [('title' | 'artist' | 'bpm' | 'added'), ('asc' | 'desc')]
   sortColumn.value = column
   sortDirection.value = direction
+  sortValue.value = value
 }
 
 function toggleSort(column: 'title' | 'artist' | 'bpm') {

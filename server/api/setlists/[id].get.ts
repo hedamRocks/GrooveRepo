@@ -91,6 +91,7 @@ export default defineEventHandler(async (event) => {
           sortOrder: st.sortOrder,
           manualBpm: st.manualBpm,
           notes: st.notes,
+          addedAt: st.addedAt,
           track: {
             id: st.track.id,
             position: st.track.position,
