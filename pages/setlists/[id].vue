@@ -27,14 +27,26 @@
                 </h1>
               </div>
 
-              <button
-                @click="showEditModal = true"
-                class="p-1.5 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-all"
-              >
-                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                </svg>
-              </button>
+              <div class="flex items-center gap-1">
+                <button
+                  @click="exportToCSV"
+                  class="p-1.5 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-all"
+                  title="Export to CSV"
+                >
+                  <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                </button>
+
+                <button
+                  @click="showEditModal = true"
+                  class="p-1.5 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-all"
+                >
+                  <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -217,7 +229,7 @@
                 </div>
 
                 <!-- Tags -->
-                <div v-if="setlistTrack.track.trackTags.length > 0" class="mt-2">
+                <div class="mt-2">
                   <div class="flex flex-wrap gap-1">
                     <span
                       v-for="trackTag in setlistTrack.track.trackTags.slice(0, 3)"
@@ -229,9 +241,20 @@
                     </span>
                     <button
                       v-if="setlistTrack.track.trackTags.length > 3"
-                      class="inline-flex items-center px-1.5 py-0.5 text-[10px] text-gray-400 bg-white/5 border border-white/10 rounded"
+                      @click="openTagModal(setlistTrack.track)"
+                      class="inline-flex items-center px-1.5 py-0.5 text-[10px] text-gray-400 bg-white/5 border border-white/10 rounded hover:bg-white/10 transition-colors"
                     >
                       +{{ setlistTrack.track.trackTags.length - 3 }}
+                    </button>
+                    <button
+                      v-if="setlistTrack.track.trackTags.length === 0"
+                      @click="openTagModal(setlistTrack.track)"
+                      class="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] text-gray-400 bg-white/5 border border-white/10 rounded hover:bg-white/10 transition-colors"
+                    >
+                      <svg class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                      </svg>
+                      Add tag
                     </button>
                   </div>
                 </div>
@@ -239,6 +262,15 @@
 
               <!-- Actions -->
               <div class="flex flex-col gap-1 flex-shrink-0">
+                <button
+                  @click="openTagModal(setlistTrack.track)"
+                  class="p-2 text-gray-500 hover:text-blue-500 hover:bg-white/5 rounded-lg transition-all"
+                  title="Manage tags"
+                >
+                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                  </svg>
+                </button>
                 <a
                   :href="getYoutubeSearchUrl(setlistTrack.track.artist, setlistTrack.track.title)"
                   target="_blank"
@@ -294,25 +326,55 @@
         <div class="p-6">
           <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">Add Track to Setlist</h2>
 
-          <!-- Search -->
-          <div class="mb-4">
-            <input
-              v-model="trackSearchQuery"
-              type="text"
-              placeholder="Search your collection..."
-              class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              @input="searchTracks"
-            />
+          <!-- Tab Selector -->
+          <div class="flex gap-2 mb-4">
+            <button
+              @click="addTrackMode = 'collection'"
+              class="flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+              :class="addTrackMode === 'collection'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'"
+            >
+              From Collection
+            </button>
+            <button
+              @click="addTrackMode = 'discogs'"
+              class="flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+              :class="addTrackMode === 'discogs'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'"
+            >
+              Add from Discogs
+            </button>
           </div>
 
-          <!-- Available Tracks -->
-          <div v-if="isSearchingTracks" class="text-center py-8">
-            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-          </div>
+          <!-- Collection Search Mode -->
+          <div v-if="addTrackMode === 'collection'">
+            <!-- Search -->
+            <div class="mb-4">
+              <input
+                v-model="trackSearchQuery"
+                type="text"
+                placeholder="Search your collection..."
+                class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                @input="searchTracks"
+              />
+            </div>
 
-          <div v-else-if="availableTracks.length === 0" class="text-center py-8 text-gray-500 dark:text-gray-400">
-            No tracks found in your collection
-          </div>
+            <!-- Available Tracks -->
+            <div v-if="isSearchingTracks" class="text-center py-8">
+              <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+            </div>
+
+            <div v-else-if="availableTracks.length === 0" class="text-center py-8">
+              <p class="text-gray-500 dark:text-gray-400 mb-4">No tracks found in your collection</p>
+              <button
+                @click="addTrackMode = 'discogs'"
+                class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+              >
+                Add from Discogs
+              </button>
+            </div>
 
           <div v-else class="space-y-2 max-h-96 overflow-y-auto">
             <div
@@ -355,6 +417,67 @@
                   <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
                 </svg>
               </a>
+            </div>
+          </div>
+          </div>
+
+          <!-- Discogs Search Mode -->
+          <div v-else-if="addTrackMode === 'discogs'">
+            <!-- Discogs Search -->
+            <div class="mb-4">
+              <input
+                v-model="discogsSearchQuery"
+                type="text"
+                placeholder="Search Discogs..."
+                class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+
+            <!-- Discogs Search Results -->
+            <div v-if="isSearchingDiscogs" class="text-center py-8">
+              <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+              <p class="text-sm text-gray-500 dark:text-gray-400 mt-2">Searching Discogs...</p>
+            </div>
+
+            <div v-else-if="discogsSearchResults.length > 0" class="space-y-3 max-h-96 overflow-y-auto">
+              <div
+                v-for="result in discogsSearchResults"
+                :key="result.id"
+                class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden"
+              >
+                <div class="p-3 flex gap-3">
+                  <div class="w-16 h-16 flex-shrink-0 bg-gray-200 dark:bg-gray-700 rounded overflow-hidden">
+                    <img
+                      v-if="result.cover_image || result.thumb"
+                      :src="result.thumb || result.cover_image"
+                      :alt="result.title"
+                      class="w-full h-full object-cover"
+                    />
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <h4 class="font-medium text-gray-900 dark:text-white text-sm truncate">{{ result.title }}</h4>
+                    <p class="text-xs text-gray-600 dark:text-gray-400">{{ result.year || 'Year unknown' }}</p>
+                    <p v-if="result.format?.length" class="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                      {{ result.format.join(', ') }}
+                    </p>
+                  </div>
+                  <button
+                    @click="addRecordFromDiscogs(result.id)"
+                    :disabled="isAddingRecord && addingDiscogsId === result.id"
+                    class="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition font-medium flex-shrink-0 self-center"
+                  >
+                    {{ isAddingRecord && addingDiscogsId === result.id ? 'Adding...' : 'Add' }}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div v-else-if="discogsSearchQuery && !isSearchingDiscogs" class="text-center py-8">
+              <p class="text-gray-500 dark:text-gray-400">No results found on Discogs</p>
+            </div>
+
+            <div v-else class="text-center py-8">
+              <p class="text-gray-500 dark:text-gray-400">Search Discogs to add a new record</p>
             </div>
           </div>
 
@@ -599,6 +722,137 @@
         </div>
       </div>
     </div>
+
+    <!-- Tag Management Modal -->
+    <div
+      v-if="showTagManagementModal && selectedTrackForTags"
+      class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+      @click="showTagManagementModal = false"
+    >
+      <div
+        class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full max-h-[80vh] overflow-hidden flex flex-col"
+        @click.stop
+      >
+        <!-- Header -->
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+          <div class="flex items-center justify-between mb-2">
+            <h2 class="text-lg font-bold text-gray-900 dark:text-white">Manage Tags</h2>
+            <button
+              @click="showTagManagementModal = false"
+              class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+            >
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          <p class="text-sm text-gray-600 dark:text-gray-400 truncate">
+            {{ selectedTrackForTags.artist }} - {{ selectedTrackForTags.title }}
+          </p>
+        </div>
+
+        <!-- Tag List -->
+        <div class="flex-1 overflow-y-auto p-4">
+          <!-- Create New Tag Form -->
+          <div v-if="!showCreateTagForm && !isLoadingTags" class="mb-4">
+            <button
+              @click="showCreateTagForm = true"
+              class="w-full flex items-center justify-center gap-2 px-3 py-2 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-600 dark:text-gray-400 hover:border-blue-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+            >
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+              </svg>
+              Create New Tag
+            </button>
+          </div>
+
+          <div v-if="showCreateTagForm" class="mb-4 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
+            <form @submit.prevent="createNewTag">
+              <div class="space-y-3">
+                <div>
+                  <input
+                    v-model="newTagName"
+                    type="text"
+                    placeholder="Tag name"
+                    required
+                    class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div class="flex gap-2">
+                  <div
+                    v-for="color in tagColorPresets"
+                    :key="color"
+                    @click="newTagColor = color"
+                    class="w-8 h-8 rounded cursor-pointer transition-transform hover:scale-110"
+                    :class="{ 'ring-2 ring-blue-500 ring-offset-2 dark:ring-offset-gray-700': newTagColor === color }"
+                    :style="{ backgroundColor: color }"
+                  ></div>
+                </div>
+                <div class="flex gap-2">
+                  <button
+                    type="button"
+                    @click="showCreateTagForm = false; newTagName = ''; newTagColor = '#6366F1'"
+                    class="flex-1 px-3 py-2 text-sm bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    :disabled="isCreatingTag"
+                    class="flex-1 px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {{ isCreatingTag ? 'Creating...' : 'Create' }}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+
+          <div v-if="isLoadingTags" class="flex justify-center py-8">
+            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          </div>
+
+          <div v-else-if="allUserTags.length === 0 && !showCreateTagForm" class="text-center py-8">
+            <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">No tags created yet</p>
+          </div>
+
+          <div v-else-if="allUserTags.length > 0" class="space-y-2">
+            <button
+              v-for="tag in allUserTags"
+              :key="tag.id"
+              @click="toggleTrackTag(tag.id)"
+              class="w-full flex items-center justify-between p-3 rounded-lg border transition-all"
+              :class="isTagAssigned(tag.id)
+                ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-500 dark:border-blue-500'
+                : 'bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'"
+            >
+              <div class="flex items-center space-x-3">
+                <div
+                  class="w-4 h-4 rounded flex-shrink-0"
+                  :style="{ backgroundColor: tag.color || '#6B7280' }"
+                ></div>
+                <span class="text-sm font-medium text-gray-900 dark:text-white">{{ tag.name }}</span>
+              </div>
+              <div v-if="isTagAssigned(tag.id)" class="flex items-center space-x-2">
+                <svg class="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="p-4 border-t border-gray-200 dark:border-gray-700">
+          <button
+            @click="showTagManagementModal = false"
+            class="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+          >
+            Done
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -623,6 +877,7 @@ interface Track {
   trackTags: Array<{
     id: string
     tag: {
+      id: string
       name: string
       color: string | null
     }
@@ -660,6 +915,14 @@ const availableTracks = ref<Track[]>([])
 const isSearchingTracks = ref(false)
 const trackSearchQuery = ref('')
 
+// Discogs search for adding records
+const addTrackMode = ref<'collection' | 'discogs'>('collection')
+const discogsSearchQuery = ref('')
+const discogsSearchResults = ref<any[]>([])
+const isSearchingDiscogs = ref(false)
+const isAddingRecord = ref(false)
+const addingDiscogsId = ref<number | null>(null)
+
 const selectedTrack = ref<SetlistTrack | null>(null)
 const manualBpm = ref<number | null>(null)
 
@@ -679,6 +942,17 @@ const sortDirection = ref<'asc' | 'desc'>('asc')
 const selectedCountry = ref<string>('')
 const selectedTagIds = ref<string[]>([])
 const tagFilterOperator = ref<'AND' | 'OR'>('OR')
+
+// Tag management
+const showTagManagementModal = ref(false)
+const selectedTrackForTags = ref<Track | null>(null)
+const allUserTags = ref<Array<{ id: string; name: string; color: string | null }>>([])
+const isLoadingTags = ref(false)
+const showCreateTagForm = ref(false)
+const newTagName = ref('')
+const newTagColor = ref('#6366F1')
+const isCreatingTag = ref(false)
+const tagColorPresets = ['#EF4444', '#F59E0B', '#10B981', '#3B82F6', '#6366F1', '#8B5CF6', '#EC4899', '#6B7280']
 
 // Get unique countries from tracks
 const availableCountries = computed(() => {
@@ -971,6 +1245,175 @@ async function updateSetlist() {
   } catch (error) {
     console.error('Failed to update setlist:', error)
     alert('Failed to update setlist')
+  }
+}
+
+async function exportToCSV() {
+  if (!setlist.value) return
+
+  try {
+    // Create a link element and trigger download
+    const url = `/api/setlists/${setlist.value.id}/export-csv`
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${setlist.value.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_setlist.csv`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  } catch (error) {
+    console.error('Failed to export CSV:', error)
+    alert('Failed to export setlist to CSV')
+  }
+}
+
+// Tag management functions
+async function loadAllTags() {
+  try {
+    isLoadingTags.value = true
+    const response = await $fetch<{ tags: Array<{ id: string; name: string; color: string | null }> }>('/api/tags')
+    allUserTags.value = response.tags
+  } catch (error) {
+    console.error('Failed to load tags:', error)
+  } finally {
+    isLoadingTags.value = false
+  }
+}
+
+async function openTagModal(track: Track) {
+  selectedTrackForTags.value = track
+  showTagManagementModal.value = true
+  await loadAllTags()
+}
+
+function isTagAssigned(tagId: string): boolean {
+  if (!selectedTrackForTags.value) return false
+  return selectedTrackForTags.value.trackTags.some(tt => tt.tag.id === tagId)
+}
+
+async function toggleTrackTag(tagId: string) {
+  if (!selectedTrackForTags.value) return
+
+  const trackId = selectedTrackForTags.value.id
+  const isAssigned = isTagAssigned(tagId)
+
+  try {
+    if (isAssigned) {
+      // Remove tag
+      await $fetch(`/api/tracks/${trackId}/tags/remove`, {
+        method: 'POST',
+        body: { tagId }
+      })
+    } else {
+      // Assign tag
+      await $fetch(`/api/tracks/${trackId}/tags/assign`, {
+        method: 'POST',
+        body: { tagId }
+      })
+    }
+
+    // Refresh setlist to get updated tags
+    await fetchSetlist()
+
+    // Update selected track reference
+    if (setlist.value) {
+      const updatedSetlistTrack = setlist.value.tracks.find(st => st.track.id === trackId)
+      if (updatedSetlistTrack) {
+        selectedTrackForTags.value = updatedSetlistTrack.track
+      }
+    }
+  } catch (error) {
+    console.error('Failed to toggle tag:', error)
+    alert('Failed to update tag')
+  }
+}
+
+async function createNewTag() {
+  if (!newTagName.value.trim()) return
+
+  try {
+    isCreatingTag.value = true
+    const response = await $fetch<{ tag: { id: string; name: string; color: string | null } }>('/api/tags/create', {
+      method: 'POST',
+      body: {
+        name: newTagName.value.trim(),
+        color: newTagColor.value
+      }
+    })
+
+    // Add new tag to the list
+    allUserTags.value.push(response.tag)
+
+    // Reset form
+    newTagName.value = ''
+    newTagColor.value = '#6366F1'
+    showCreateTagForm.value = false
+  } catch (error) {
+    console.error('Failed to create tag:', error)
+    alert('Failed to create tag')
+  } finally {
+    isCreatingTag.value = false
+  }
+}
+
+// Discogs search with debounce
+let discogsSearchTimeout: ReturnType<typeof setTimeout> | null = null
+watch(discogsSearchQuery, (newValue) => {
+  if (discogsSearchTimeout) clearTimeout(discogsSearchTimeout)
+
+  if (!newValue.trim()) {
+    discogsSearchResults.value = []
+    return
+  }
+
+  discogsSearchTimeout = setTimeout(async () => {
+    await searchDiscogs()
+  }, 500)
+})
+
+async function searchDiscogs() {
+  if (!discogsSearchQuery.value.trim()) return
+
+  isSearchingDiscogs.value = true
+  try {
+    const params = new URLSearchParams({ q: discogsSearchQuery.value })
+    const response = await $fetch<{ results: any[] }>(`/api/discogs/search?${params}`)
+    discogsSearchResults.value = response.results || []
+  } catch (error) {
+    console.error('Discogs search failed:', error)
+    discogsSearchResults.value = []
+  } finally {
+    isSearchingDiscogs.value = false
+  }
+}
+
+async function addRecordFromDiscogs(discogsId: number) {
+  isAddingRecord.value = true
+  addingDiscogsId.value = discogsId
+
+  try {
+    const response = await $fetch<{ record: any; updated: boolean }>('/api/records/create', {
+      method: 'POST',
+      body: { discogsId }
+    })
+
+    // Refresh the track search to show the newly added record
+    await searchTracks()
+
+    // Switch back to collection mode to show the new record
+    addTrackMode.value = 'collection'
+    discogsSearchQuery.value = ''
+    discogsSearchResults.value = []
+
+    // Show success message
+    if (response.updated) {
+      alert('Record already in your collection - metadata updated!')
+    }
+  } catch (error: any) {
+    console.error('Failed to add record:', error)
+    alert(error.data?.message || 'Failed to add record')
+  } finally {
+    isAddingRecord.value = false
+    addingDiscogsId.value = null
   }
 }
 

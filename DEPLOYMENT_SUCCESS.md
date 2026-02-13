@@ -4,7 +4,7 @@ Your Stack vinyl collection app is now live on the web!
 
 ## 🌐 Your App URLs
 
-- **Production URL**: https://stack-pxdnm3t1x-nicolaihedams-projects.vercel.app
+- **Production URL**: https://stack-35h847yn9-nicolaihedams-projects.vercel.app
 - **Vercel Dashboard**: https://vercel.com/nicolaihedams-projects/stack
 - **Neon Dashboard**: https://console.neon.tech
 
@@ -27,7 +27,7 @@ Your Discogs callback URL needs to be updated:
 2. Click on your application
 3. Update **Callback URL** to:
    ```
-   https://stack-pxdnm3t1x-nicolaihedams-projects.vercel.app/api/auth/discogs/callback
+   https://stack-35h847yn9-nicolaihedams-projects.vercel.app/api/auth/discogs/callback
    ```
 4. Save changes
 
@@ -63,7 +63,7 @@ vercel --prod
 
 ### 3. Test Your Deployment
 
-1. **Open the app**: https://stack-pxdnm3t1x-nicolaihedams-projects.vercel.app
+1. **Open the app**: https://stack-35h847yn9-nicolaihedams-projects.vercel.app
 2. **Test login**: Try logging in with your email
 3. **Test Discogs**: Connect your Discogs account
 4. **Check your data**: Verify your 766 records are showing
@@ -73,7 +73,7 @@ vercel --prod
 Once you've tested the app:
 
 1. **Open Safari** on your iPhone
-2. **Navigate to**: https://stack-pxdnm3t1x-nicolaihedams-projects.vercel.app
+2. **Navigate to**: https://stack-35h847yn9-nicolaihedams-projects.vercel.app
 3. **Tap the Share button** (square with arrow pointing up)
 4. **Scroll down** and tap "Add to Home Screen"
 5. **Edit the name** if you want (default is "Stack")

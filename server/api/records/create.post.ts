@@ -98,14 +98,79 @@ export default defineEventHandler(async (event) => {
           userId: user.id,
           releaseId: release.id
         }
+      },
+      include: {
+        release: true,
+        shelfPlacements: {
+          include: {
+            shelf: true
+          }
+        }
       }
     })
 
     if (existingUserRecord) {
-      throw createError({
-        statusCode: 400,
-        message: 'You already have this record in your collection'
+      // Update the release metadata with latest data from Discogs
+      const credentials = JSON.parse(user.discogsToken)
+      const { token, secret } = credentials
+      const discogsClient = getDiscogsClient()
+      const discogsRelease = await discogsClient.getRelease(discogsId, token, secret)
+
+      // Flatten artist names
+      const artistString = discogsRelease.artists
+        ?.map(a => a.name)
+        .filter(name => name !== 'Various')
+        .join(', ') || null
+
+      // Get primary label
+      const primaryLabel = discogsRelease.labels?.[0]
+
+      // Get best cover image
+      const coverImage = discogsRelease.images?.find(img => img.type === 'primary')?.uri
+        || discogsRelease.images?.[0]?.uri
+        || null
+
+      // Flatten formats array
+      const formats = discogsRelease.formats?.flatMap((fmt: any) => {
+        const parts = []
+        if (fmt.name) parts.push(fmt.name)
+        if (fmt.descriptions) parts.push(...fmt.descriptions)
+        return parts
+      }) || []
+
+      // Update the release with fresh data
+      await prisma.release.update({
+        where: { id: release.id },
+        data: {
+          title: discogsRelease.title,
+          artist: artistString,
+          label: primaryLabel?.name || null,
+          catNo: primaryLabel?.catno || null,
+          year: discogsRelease.year || null,
+          country: discogsRelease.country || null,
+          genres: discogsRelease.genres || [],
+          styles: discogsRelease.styles || [],
+          formats: formats,
+          coverUrl: coverImage,
+          thumbUrl: discogsRelease.thumb || null,
+          discogsData: discogsRelease as any,
+        }
       })
+
+      // Return the existing record with updated release data
+      const updatedRecord = await prisma.userRecord.findUnique({
+        where: { id: existingUserRecord.id },
+        include: {
+          release: true,
+          shelfPlacements: {
+            include: {
+              shelf: true
+            }
+          }
+        }
+      })
+
+      return { record: updatedRecord, updated: true }
     }
 
     // Create user record
@@ -124,7 +189,7 @@ export default defineEventHandler(async (event) => {
       }
     })
 
-    return { record: userRecord }
+    return { record: userRecord, updated: false }
 
   } catch (error) {
     console.error('[Record Create] Error:', error)
