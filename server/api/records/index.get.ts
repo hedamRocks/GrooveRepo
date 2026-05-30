@@ -91,6 +91,8 @@ export default defineEventHandler(async (event) => {
             label: true,
             catNo: true,
             year: true,
+            country: true,
+            formats: true,
             genres: true,
             styles: true,
             coverUrl: true,

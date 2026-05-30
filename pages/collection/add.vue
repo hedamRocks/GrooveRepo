@@ -123,173 +123,157 @@ function formatVersionDetails(version: any): string {
 </script>
 
 <template>
-  <div class="min-h-screen" style="background: var(--bg-primary);">
-    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <!-- Header -->
-      <div class="mb-8">
-        <button
-          @click="router.back()"
-          class="flex items-center glass-hover mb-4 transition-all duration-200 px-3 py-2"
-          style="color: var(--text-secondary);"
-        >
-          <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
-          </svg>
-          Back to collection
-        </button>
+  <div class="max-w-3xl mx-auto px-4 sm:px-6 py-8">
+    <!-- Header -->
+    <div class="mb-8">
+      <button
+        @click="router.back()"
+        class="btn-ghost mb-5 -ml-2"
+      >
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"></path>
+        </svg>
+        Back to collection
+      </button>
 
-        <h1 class="text-3xl font-bold gradient-text mb-2">Add a Record</h1>
-        <p style="color: var(--text-secondary);">Search Discogs to add a record to your collection</p>
+      <p class="eyebrow mb-2">Add to collection</p>
+      <h1 class="display text-4xl mb-2">Search Discogs</h1>
+      <p style="color: var(--text-secondary);">Find an artist, album, or label and add the exact pressing you own.</p>
+    </div>
+
+    <!-- Search Box -->
+    <div class="relative">
+      <svg class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5" style="color: var(--text-tertiary);" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+      </svg>
+      <input
+        v-model="searchQuery"
+        type="text"
+        placeholder="Search for artist, album, or label…"
+        class="input w-full pl-12 pr-4 py-3.5 text-base"
+      />
+    </div>
+
+    <!-- Loading -->
+    <div v-if="isSearching" class="text-center py-16">
+      <div class="w-10 h-10 border-2 rounded-full animate-spin mx-auto mb-4" style="border-color: var(--accent); border-top-color: transparent;"></div>
+      <p style="color: var(--text-secondary);">Searching Discogs…</p>
+    </div>
+
+    <!-- Search Results -->
+    <div v-else-if="searchResults.length > 0" class="space-y-3 mt-6">
+      <div
+        v-for="result in searchResults"
+        :key="result.id"
+        class="surface overflow-hidden glass-hover"
+      >
+        <!-- Main Result -->
+        <div class="p-4 flex gap-4">
+          <!-- Cover -->
+          <div class="w-24 h-24 flex-shrink-0 rounded-xl overflow-hidden" style="background: var(--bg-tertiary);">
+            <img
+              v-if="result.cover_image || result.thumb"
+              :src="result.thumb || result.cover_image"
+              :alt="result.title"
+              class="w-full h-full object-cover"
+            />
+            <div v-else class="w-full h-full flex items-center justify-center">
+              <svg class="w-10 h-10" style="color: var(--text-tertiary);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
+              </svg>
+            </div>
+          </div>
+
+          <!-- Info -->
+          <div class="flex-1 min-w-0">
+            <h3 class="font-semibold truncate" style="color: var(--text-primary);">{{ result.title }}</h3>
+            <p class="text-sm truncate mt-0.5" style="color: var(--text-secondary);">{{ result.year || 'Year unknown' }}</p>
+            <p v-if="result.label?.length" class="text-sm truncate mt-0.5" style="color: var(--text-tertiary);">
+              {{ result.label.join(', ') }}
+            </p>
+            <div v-if="result.format?.length" class="flex flex-wrap gap-1.5 mt-2">
+              <span v-for="f in result.format.slice(0, 3)" :key="f" class="chip !py-0.5 !px-2 !text-[11px]">{{ f }}</span>
+            </div>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="flex flex-col gap-2 items-end justify-center shrink-0">
+            <!-- Show Versions Button (if master exists) -->
+            <button
+              v-if="result.master_id"
+              @click="toggleVersions(result)"
+              class="btn-ghost text-sm"
+            >
+              <svg class="w-4 h-4 transition-transform" :class="{ 'rotate-180': isExpanded(result) }" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"></path>
+              </svg>
+              {{ isExpanded(result) ? 'Hide' : 'Versions' }}
+            </button>
+
+            <!-- Add Button -->
+            <button
+              @click="addRecord(result.id)"
+              :disabled="isAdding && addingId === result.id"
+              class="btn-primary !py-2 !px-4 text-sm"
+            >
+              {{ isAdding && addingId === result.id ? 'Adding…' : result.master_id ? 'Add version' : 'Add' }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Versions List (Expandable) -->
+        <div v-if="isExpanded(result)" style="border-top: 1px solid var(--border-subtle); background: var(--bg-primary);">
+          <!-- Loading State -->
+          <div v-if="isLoadingVersions(result)" class="p-4 text-center">
+            <div class="w-7 h-7 border-2 rounded-full animate-spin mx-auto mb-2" style="border-color: var(--accent); border-top-color: transparent;"></div>
+            <p class="text-sm" style="color: var(--text-secondary);">Loading versions…</p>
+          </div>
+
+          <!-- Versions List -->
+          <div v-else>
+            <div
+              v-for="version in getVersions(result.master_id)"
+              :key="version.id"
+              class="p-3 px-4 flex items-center justify-between gap-4 transition-colors hover:bg-white/[0.03]"
+              style="border-top: 1px solid var(--border-subtle);"
+            >
+              <div class="flex-1 min-w-0">
+                <p class="text-sm font-medium truncate" style="color: var(--text-primary);">{{ version.title }}</p>
+                <p class="text-xs mt-0.5" style="color: var(--text-tertiary);">{{ formatVersionDetails(version) }}</p>
+              </div>
+              <button
+                @click="addRecord(version.id)"
+                :disabled="isAdding && addingId === version.id"
+                class="btn-secondary !py-1.5 !px-3.5 text-sm flex-shrink-0"
+              >
+                {{ isAdding && addingId === version.id ? 'Adding…' : 'Add' }}
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
+    </div>
 
-      <!-- Search Box -->
-      <div class="relative">
-        <input
-          v-model="searchQuery"
-          type="text"
-          placeholder="Search for artist, album, or label..."
-          class="w-full px-4 py-3 pl-12 border border-purple-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
-          style="background: var(--bg-secondary); box-shadow: var(--shadow-glass);"
-        />
-        <svg
-          class="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+    <!-- Empty State -->
+    <div v-else-if="searchQuery && !isSearching" class="text-center py-16">
+      <div class="w-20 h-20 surface rounded-2xl flex items-center justify-center mx-auto mb-4">
+        <svg class="w-9 h-9" style="color: var(--text-tertiary);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
         </svg>
       </div>
+      <h3 class="display text-xl mb-2">No results found</h3>
+      <p style="color: var(--text-secondary);">Try a different search term.</p>
+    </div>
 
-      <!-- Loading -->
-      <div v-if="isSearching" class="text-center py-12">
-        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
-        <p class="text-gray-600">Searching Discogs...</p>
+    <!-- Initial State -->
+    <div v-else class="text-center py-16">
+      <div class="w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-4" style="background: var(--accent-soft); border: 1px solid var(--border-subtle);">
+        <svg class="w-9 h-9" style="color: var(--accent);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+        </svg>
       </div>
-
-      <!-- Search Results -->
-      <div v-else-if="searchResults.length > 0" class="space-y-4">
-        <div
-          v-for="result in searchResults"
-          :key="result.id"
-          class="bg-white rounded-xl shadow-md hover:shadow-lg transition overflow-hidden"
-        >
-          <!-- Main Result -->
-          <div class="p-4 flex gap-4">
-            <!-- Cover -->
-            <div class="w-24 h-24 flex-shrink-0 bg-gray-200 rounded-lg overflow-hidden">
-              <img
-                v-if="result.cover_image || result.thumb"
-                :src="result.thumb || result.cover_image"
-                :alt="result.title"
-                class="w-full h-full object-cover"
-              />
-              <div v-else class="w-full h-full flex items-center justify-center bg-gradient-to-br from-purple-100 to-indigo-100">
-                <svg class="w-12 h-12 text-purple-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
-                </svg>
-              </div>
-            </div>
-
-            <!-- Info -->
-            <div class="flex-1 min-w-0">
-              <h3 class="font-semibold text-gray-900 truncate">{{ result.title }}</h3>
-              <p class="text-sm text-gray-600 truncate">{{ result.year || 'Year unknown' }}</p>
-              <p v-if="result.label?.length" class="text-sm text-gray-500 truncate">
-                {{ result.label.join(', ') }}
-              </p>
-              <p v-if="result.genre?.length" class="text-xs text-gray-400 mt-1">
-                {{ result.genre.join(', ') }}
-              </p>
-              <p v-if="result.format?.length" class="text-xs text-purple-600 mt-1 font-medium">
-                {{ result.format.join(', ') }}
-              </p>
-            </div>
-
-            <!-- Action Buttons -->
-            <div class="flex flex-col gap-2 items-end justify-center">
-              <!-- Show Versions Button (if master exists) -->
-              <button
-                v-if="result.master_id"
-                @click="toggleVersions(result)"
-                class="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition font-medium flex items-center gap-1"
-              >
-                <svg
-                  class="w-4 h-4 transition-transform"
-                  :class="{ 'rotate-180': isExpanded(result) }"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                </svg>
-                {{ isExpanded(result) ? 'Hide' : 'Show' }} Versions
-              </button>
-
-              <!-- Add Button -->
-              <button
-                @click="addRecord(result.id)"
-                :disabled="isAdding && addingId === result.id"
-                class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition font-medium"
-              >
-                {{ isAdding && addingId === result.id ? 'Adding...' : result.master_id ? 'Add This Version' : 'Add' }}
-              </button>
-            </div>
-          </div>
-
-          <!-- Versions List (Expandable) -->
-          <div v-if="isExpanded(result)" class="border-t border-gray-200 bg-gray-50">
-            <!-- Loading State -->
-            <div v-if="isLoadingVersions(result)" class="p-4 text-center">
-              <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto mb-2"></div>
-              <p class="text-sm text-gray-600">Loading versions...</p>
-            </div>
-
-            <!-- Versions List -->
-            <div v-else class="divide-y divide-gray-200">
-              <div
-                v-for="version in getVersions(result.master_id)"
-                :key="version.id"
-                class="p-3 hover:bg-gray-100 transition flex items-center justify-between gap-4"
-              >
-                <div class="flex-1 min-w-0">
-                  <p class="text-sm font-medium text-gray-900 truncate">{{ version.title }}</p>
-                  <p class="text-xs text-gray-600">{{ formatVersionDetails(version) }}</p>
-                </div>
-                <button
-                  @click="addRecord(version.id)"
-                  :disabled="isAdding && addingId === version.id"
-                  class="px-3 py-1.5 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition font-medium flex-shrink-0"
-                >
-                  {{ isAdding && addingId === version.id ? 'Adding...' : 'Add' }}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Empty State -->
-      <div v-else-if="searchQuery && !isSearching" class="text-center py-12">
-        <div class="w-20 h-20 bg-gray-200 rounded-full flex items-center justify-center mx-auto mb-4">
-          <svg class="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-          </svg>
-        </div>
-        <h3 class="text-xl font-semibold text-gray-900 mb-2">No results found</h3>
-        <p class="text-gray-600">Try a different search term</p>
-      </div>
-
-      <!-- Initial State -->
-      <div v-else class="text-center py-12">
-        <div class="w-20 h-20 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
-          <svg class="w-10 h-10 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-          </svg>
-        </div>
-        <h3 class="text-xl font-semibold text-gray-900 mb-2">Search Discogs</h3>
-        <p class="text-gray-600">Enter an artist, album, or label to get started</p>
-      </div>
+      <h3 class="display text-xl mb-2">Start typing to search</h3>
+      <p style="color: var(--text-secondary);">Enter an artist, album, or label to get started.</p>
     </div>
   </div>
 </template>

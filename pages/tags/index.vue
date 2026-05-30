@@ -1,205 +1,120 @@
 <template>
-  <div class="min-h-screen bg-gray-50 dark:bg-gray-900">
-    <div class="max-w-7xl mx-auto px-4 py-8">
-      <!-- Header -->
-      <div class="flex items-center justify-between mb-8">
-        <div>
-          <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Tags</h1>
-          <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
-            Create and manage custom tags for organizing your tracks
-          </p>
-        </div>
-        <button
-          @click="showCreateModal = true"
-          class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          Create Tag
-        </button>
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 pb-20">
+    <!-- Header -->
+    <div class="flex items-end justify-between gap-4 py-8">
+      <div>
+        <p class="eyebrow mb-2">DJ tools</p>
+        <h1 class="display text-4xl">Tags</h1>
+        <p class="mt-2 text-sm" style="color: var(--text-secondary);">Create and manage custom tags for organizing your tracks.</p>
       </div>
+      <button @click="showCreateModal = true" class="btn-primary shrink-0">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.2"><path stroke-linecap="round" d="M12 5v14M5 12h14"></path></svg>
+        New tag
+      </button>
+    </div>
 
-      <!-- Loading State -->
-      <div v-if="isLoading" class="flex justify-center items-center py-20">
-        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+    <!-- Loading State -->
+    <div v-if="isLoading" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      <div v-for="i in 4" :key="i" class="surface p-5">
+        <div class="h-6 skeleton rounded w-2/3 mb-3"></div>
+        <div class="h-4 skeleton rounded w-1/3"></div>
       </div>
+    </div>
 
-      <!-- Empty State -->
-      <div v-else-if="tags.length === 0" class="text-center py-20">
-        <div class="text-gray-400 dark:text-gray-600 mb-4">
-          <svg class="mx-auto h-24 w-24" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
-          </svg>
-        </div>
-        <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-2">No tags yet</h3>
-        <p class="text-gray-600 dark:text-gray-400 mb-6">Create tags to organize and categorize your tracks</p>
-        <button
-          @click="showCreateModal = true"
-          class="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          Create Your First Tag
-        </button>
+    <!-- Empty State -->
+    <div v-else-if="tags.length === 0" class="text-center py-24">
+      <div class="w-20 h-20 surface rounded-2xl flex items-center justify-center mx-auto mb-5">
+        <svg class="w-9 h-9" style="color: var(--accent);" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+        </svg>
       </div>
+      <h3 class="display text-2xl mb-2">No tags yet</h3>
+      <p class="mb-6" style="color: var(--text-secondary);">Create tags to organize and categorize your tracks.</p>
+      <button @click="showCreateModal = true" class="btn-primary inline-flex">Create your first tag</button>
+    </div>
 
-      <!-- Tags Grid -->
-      <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        <div
-          v-for="tag in tags"
-          :key="tag.id"
-          class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 flex flex-col"
-        >
-          <!-- Tag Header -->
-          <div class="flex items-start justify-between mb-3">
-            <div class="flex items-center space-x-2 flex-1 min-w-0">
-              <div
-                class="w-8 h-8 rounded flex-shrink-0"
-                :style="{ backgroundColor: tag.color || '#6B7280' }"
-              ></div>
-              <h3 class="text-lg font-semibold text-gray-900 dark:text-white truncate">
-                {{ tag.name }}
-              </h3>
-            </div>
-            <button
-              @click="openDeleteModal(tag)"
-              class="text-gray-400 hover:text-red-600 transition-colors flex-shrink-0"
-            >
-              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-            </button>
+    <!-- Tags Grid -->
+    <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      <div v-for="tag in tags" :key="tag.id" class="surface glass-hover p-5 flex flex-col">
+        <div class="flex items-start justify-between mb-3">
+          <div class="flex items-center gap-2.5 flex-1 min-w-0">
+            <span class="w-3.5 h-3.5 rounded-full flex-shrink-0" :style="{ backgroundColor: tag.color || '#ff4d3d' }"></span>
+            <h3 class="text-lg font-semibold truncate" style="color: var(--text-primary);">{{ tag.name }}</h3>
           </div>
+          <button @click="openDeleteModal(tag)" class="icon-danger flex-shrink-0" aria-label="Delete tag">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+          </button>
+        </div>
 
-          <!-- Description -->
-          <p v-if="tag.description" class="text-sm text-gray-600 dark:text-gray-400 mb-3 line-clamp-2">
-            {{ tag.description }}
-          </p>
+        <p v-if="tag.description" class="text-sm mb-3 line-clamp-2" style="color: var(--text-secondary);">{{ tag.description }}</p>
 
-          <!-- Track Count -->
-          <div class="mt-auto pt-3 border-t border-gray-200 dark:border-gray-700">
-            <div class="text-sm text-gray-600 dark:text-gray-400">
-              {{ tag._count.trackTags }} {{ tag._count.trackTags === 1 ? 'track' : 'tracks' }}
-            </div>
+        <div class="mt-auto pt-3" style="border-top: 1px solid var(--border-subtle);">
+          <div class="text-sm font-mono" style="color: var(--text-tertiary);">
+            {{ tag._count.trackTags }} {{ tag._count.trackTags === 1 ? 'track' : 'tracks' }}
           </div>
         </div>
       </div>
     </div>
 
     <!-- Create Tag Modal -->
-    <div
-      v-if="showCreateModal"
-      class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-      @click="showCreateModal = false"
-    >
-      <div
-        class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4"
-        @click.stop
-      >
-        <div class="p-6">
-          <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">Create New Tag</h2>
+    <Teleport to="body">
+      <div v-if="showCreateModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-[60]" @click="showCreateModal = false">
+        <div class="surface max-w-md w-full p-6 scale-in" style="box-shadow: var(--shadow-lg);" @click.stop>
+          <h2 class="display text-2xl mb-5">Create tag</h2>
 
-          <form @submit.prevent="createTag">
-            <div class="space-y-4">
-              <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Name *
-                </label>
-                <input
-                  v-model="newTag.name"
-                  type="text"
-                  required
-                  class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="e.g., Peak Time, Opening, Closing"
-                />
-              </div>
-
-              <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Description
-                </label>
-                <textarea
-                  v-model="newTag.description"
-                  rows="3"
-                  class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="What does this tag represent?"
-                ></textarea>
-              </div>
-
-              <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Color
-                </label>
-                <div class="grid grid-cols-8 gap-2 mb-2">
-                  <button
-                    v-for="color in colorPresets"
-                    :key="color"
-                    type="button"
-                    @click="newTag.color = color"
-                    class="w-10 h-10 rounded transition-transform hover:scale-110"
-                    :class="{ 'ring-2 ring-blue-500 ring-offset-2': newTag.color === color }"
-                    :style="{ backgroundColor: color }"
-                  ></button>
-                </div>
-                <input
-                  v-model="newTag.color"
-                  type="text"
-                  placeholder="#6366F1"
-                  class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
+          <form @submit.prevent="createTag" class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium mb-2" style="color: var(--text-secondary);">Name *</label>
+              <input v-model="newTag.name" type="text" required class="input w-full px-4 py-3" placeholder="e.g. Peak Time, Opening, Closing" />
             </div>
 
-            <div class="flex justify-end space-x-3 mt-6">
-              <button
-                type="button"
-                @click="showCreateModal = false"
-                class="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                :disabled="isCreating"
-                class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
-              >
-                {{ isCreating ? 'Creating...' : 'Create Tag' }}
-              </button>
+            <div>
+              <label class="block text-sm font-medium mb-2" style="color: var(--text-secondary);">Description</label>
+              <textarea v-model="newTag.description" rows="3" class="input w-full px-4 py-3 resize-none" placeholder="What does this tag represent?"></textarea>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium mb-2" style="color: var(--text-secondary);">Color</label>
+              <div class="grid grid-cols-8 gap-2 mb-3">
+                <button
+                  v-for="color in colorPresets"
+                  :key="color"
+                  type="button"
+                  @click="newTag.color = color"
+                  class="w-9 h-9 rounded-lg transition-transform hover:scale-110"
+                  :class="{ 'ring-2 ring-white ring-offset-2 ring-offset-[var(--bg-secondary)]': newTag.color === color }"
+                  :style="{ backgroundColor: color }"
+                ></button>
+              </div>
+              <input v-model="newTag.color" type="text" placeholder="#ff4d3d" class="input w-full px-4 py-2.5 font-mono text-sm" />
+            </div>
+
+            <div class="flex justify-end gap-3 pt-2">
+              <button type="button" @click="showCreateModal = false" class="btn-secondary">Cancel</button>
+              <button type="submit" :disabled="isCreating" class="btn-primary">{{ isCreating ? 'Creating…' : 'Create tag' }}</button>
             </div>
           </form>
         </div>
       </div>
-    </div>
+    </Teleport>
 
     <!-- Delete Confirmation Modal -->
-    <div
-      v-if="showDeleteModal"
-      class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-      @click="showDeleteModal = false"
-    >
-      <div
-        class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4"
-        @click.stop
-      >
-        <div class="p-6">
-          <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">Delete Tag</h2>
-          <p class="text-gray-600 dark:text-gray-400 mb-6">
-            Are you sure you want to delete "{{ tagToDelete?.name }}"? This will remove the tag from all tracks.
+    <Teleport to="body">
+      <div v-if="showDeleteModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-[60]" @click="showDeleteModal = false">
+        <div class="surface max-w-md w-full p-6 scale-in" style="box-shadow: var(--shadow-lg);" @click.stop>
+          <h2 class="display text-2xl mb-3">Delete tag</h2>
+          <p class="mb-6" style="color: var(--text-secondary);">
+            Are you sure you want to delete "<span style="color: var(--text-primary);">{{ tagToDelete?.name }}</span>"? This will remove the tag from all tracks.
           </p>
-          <div class="flex justify-end space-x-3">
-            <button
-              @click="showDeleteModal = false"
-              class="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              @click="deleteTag"
-              :disabled="isDeleting"
-              class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
-            >
-              {{ isDeleting ? 'Deleting...' : 'Delete' }}
-            </button>
+          <div class="flex justify-end gap-3">
+            <button @click="showDeleteModal = false" class="btn-secondary">Cancel</button>
+            <button @click="deleteTag" :disabled="isDeleting" class="btn-primary" style="background: #e23b2c;">{{ isDeleting ? 'Deleting…' : 'Delete' }}</button>
           </div>
         </div>
       </div>
-    </div>
+    </Teleport>
   </div>
 </template>
 
@@ -228,7 +143,7 @@ const tagToDelete = ref<Tag | null>(null)
 const newTag = ref({
   name: '',
   description: '',
-  color: '#6366F1',
+  color: '#ff4d3d',
 })
 
 const colorPresets = [

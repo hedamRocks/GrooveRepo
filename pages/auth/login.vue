@@ -1,30 +1,34 @@
 <script setup lang="ts">
 /**
- * Email-based magic link login
+ * Email + password login
  */
+definePageMeta({ layout: 'blank' })
 
 const email = ref('')
+const password = ref('')
 const isLoading = ref(false)
-const message = ref('')
-const isSuccess = ref(false)
+const errorMessage = ref('')
 
-async function sendMagicLink() {
-  if (!email.value) return
+async function login() {
+  if (!email.value || !password.value) return
 
   isLoading.value = true
-  message.value = ''
+  errorMessage.value = ''
 
   try {
-    const response = await $fetch('/api/auth/send-magic-link', {
+    const response = await $fetch('/api/auth/login', {
       method: 'POST',
-      body: { email: email.value }
+      body: { email: email.value, password: password.value },
     })
 
-    isSuccess.value = true
-    message.value = response.message || 'Check your email for a sign-in link'
+    // Send connected users to the collection, others into onboarding.
+    if (response.user?.discogsConnected) {
+      await navigateTo('/collection')
+    } else {
+      await navigateTo('/onboarding/connect-discogs')
+    }
   } catch (error: any) {
-    isSuccess.value = false
-    message.value = error.data?.message || 'Failed to send magic link. Please try again.'
+    errorMessage.value = error.data?.message || 'Invalid email or password'
   } finally {
     isLoading.value = false
   }
@@ -32,69 +36,76 @@ async function sendMagicLink() {
 </script>
 
 <template>
-  <div class="min-h-screen flex items-center justify-center p-4" style="background: var(--bg-primary);">
-    <div class="max-w-md w-full">
-      <!-- Header -->
-      <div class="text-center mb-8">
-        <h1 class="text-4xl font-bold gradient-text mb-2">Welcome</h1>
-        <p style="color: var(--text-secondary);">Your visual vinyl collection</p>
+  <div class="min-h-screen grid lg:grid-cols-2 bg-grain" style="background: var(--bg-primary);">
+    <!-- Brand panel -->
+    <div class="relative hidden lg:flex flex-col justify-between p-12 overflow-hidden" style="border-right: 1px solid var(--border-subtle);">
+      <div class="absolute -top-24 -left-24 w-[30rem] h-[30rem] rounded-full blur-[120px] pointer-events-none" style="background: rgba(255,77,61,0.14);"></div>
+      <div class="relative flex items-center gap-2">
+        <span class="w-3 h-3 rounded-full" style="background: var(--accent);"></span>
+        <span class="font-display font-bold text-xl">GrooveRepo</span>
       </div>
+      <div class="relative max-w-md">
+        <p class="eyebrow mb-5">For record collectors</p>
+        <h1 class="display text-6xl leading-[0.95] mb-6">Your vinyl,<br>beautifully<br><span style="color: var(--accent);">organized.</span></h1>
+        <p class="text-lg" style="color: var(--text-secondary);">Import your Discogs collection, build shelves, track conditions and explore your stats — all in one place.</p>
+      </div>
+      <div class="relative text-sm" style="color: var(--text-tertiary);">Your collection, your way.</div>
+    </div>
 
-      <!-- Login Card -->
-      <div class="glass p-8" style="background: var(--bg-secondary); box-shadow: var(--shadow-glass);">
-        <div v-if="!isSuccess">
-          <h2 class="text-2xl font-semibold mb-2" style="color: var(--text-primary);">Sign in</h2>
-          <p class="mb-6" style="color: var(--text-secondary);">Enter your email to receive a magic link</p>
-
-          <form @submit.prevent="sendMagicLink" class="space-y-4">
-            <div>
-              <label for="email" class="block text-sm font-medium mb-2" style="color: var(--text-secondary);">
-                Email address
-              </label>
-              <input
-                id="email"
-                v-model="email"
-                type="email"
-                required
-                class="w-full px-4 py-3 border glass-input transition-all duration-200 outline-none"
-                style="background: var(--bg-tertiary); border-color: var(--border-glass); color: var(--text-primary);"
-                placeholder="you@example.com"
-              />
-            </div>
-
-            <button
-              type="submit"
-              :disabled="isLoading || !email"
-              class="btn-primary w-full py-3 font-semibold"
-              :class="{ 'opacity-50 cursor-not-allowed': isLoading || !email }"
-            >
-              <span v-if="isLoading">Sending...</span>
-              <span v-else>Send magic link</span>
-            </button>
-          </form>
-
-          <p v-if="message && !isSuccess" class="mt-4 text-sm text-red-400">
-            {{ message }}
-          </p>
+    <!-- Form panel -->
+    <div class="flex items-center justify-center p-6">
+      <div class="max-w-sm w-full">
+        <!-- Mobile wordmark -->
+        <div class="lg:hidden flex items-center justify-center gap-2 mb-10">
+          <span class="w-3 h-3 rounded-full" style="background: var(--accent);"></span>
+          <span class="font-display font-bold text-xl">GrooveRepo</span>
         </div>
 
-        <!-- Success State -->
-        <div v-else class="text-center py-4">
-          <div class="w-16 h-16 glass rounded-full flex items-center justify-center mx-auto mb-4" style="background: var(--bg-glass);">
-            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color: var(--neon-green);">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-            </svg>
+        <p class="eyebrow mb-3">Welcome back</p>
+        <h2 class="display text-3xl mb-2">Sign in</h2>
+        <p class="mb-8" style="color: var(--text-secondary);">Enter your email and password to continue.</p>
+
+        <form @submit.prevent="login" class="space-y-4">
+          <div>
+            <label for="email" class="block text-sm font-medium mb-2" style="color: var(--text-secondary);">Email address</label>
+            <input
+              id="email"
+              v-model="email"
+              type="email"
+              autocomplete="email"
+              required
+              class="input w-full px-4 py-3.5"
+              placeholder="you@example.com"
+            />
           </div>
-          <h3 class="text-xl font-semibold mb-2" style="color: var(--text-primary);">Check your email</h3>
-          <p class="mb-4" style="color: var(--text-secondary);">{{ message }}</p>
-          <p class="text-sm" style="color: var(--text-tertiary);">The link will expire in 15 minutes</p>
-        </div>
-      </div>
 
-      <!-- Footer -->
-      <p class="text-center text-sm mt-6" style="color: var(--text-secondary);">
-        No passwords. No tracking. Just your collection.
-      </p>
+          <div>
+            <label for="password" class="block text-sm font-medium mb-2" style="color: var(--text-secondary);">Password</label>
+            <input
+              id="password"
+              v-model="password"
+              type="password"
+              autocomplete="current-password"
+              required
+              class="input w-full px-4 py-3.5"
+              placeholder="••••••••"
+            />
+          </div>
+
+          <button
+            type="submit"
+            :disabled="isLoading || !email || !password"
+            class="btn-primary w-full"
+          >
+            <span v-if="isLoading">Signing in…</span>
+            <span v-else>Sign in</span>
+          </button>
+        </form>
+
+        <p v-if="errorMessage" class="mt-4 text-sm" style="color: var(--accent);">
+          {{ errorMessage }}
+        </p>
+      </div>
     </div>
   </div>
 </template>

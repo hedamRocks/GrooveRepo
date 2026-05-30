@@ -9,6 +9,7 @@ const search = ref('')
 const searchDebounced = ref('')
 const isLoading = ref(true)
 const isLoadingMore = ref(false)
+const hasError = ref(false)
 const records = ref<any[]>([])
 const totalRecords = ref(0)
 const currentPage = ref(1)
@@ -35,9 +36,9 @@ const filterOptions = ref({
 })
 
 const activeFiltersCount = computed(() => {
-  return filters.value.genres.length + 
-         filters.value.styles.length + 
-         filters.value.countries.length + 
+  return filters.value.genres.length +
+         filters.value.styles.length +
+         filters.value.countries.length +
          filters.value.labels.length +
          (filters.value.yearRange.min !== null || filters.value.yearRange.max !== null ? 1 : 0)
 })
@@ -52,16 +53,19 @@ watch(search, (newValue) => {
   }, 300)
 })
 
-// Fetch records when search or filters change
+// Refetch when search or filters change (user-driven, client-only).
+// The initial load happens in onMounted — not `immediate` — so we don't fire a
+// pointless cookie-less request during SSR (whose result isn't rendered anyway).
 watch([searchDebounced, filters], async () => {
   currentPage.value = 1
   records.value = []
   await fetchRecords(true)
-}, { immediate: true, deep: true })
+}, { deep: true })
 
 async function fetchRecords(reset = false) {
   if (reset) {
     isLoading.value = true
+    hasError.value = false
     currentPage.value = 1
     records.value = []
   } else {
@@ -107,11 +111,9 @@ async function fetchRecords(reset = false) {
 
     totalRecords.value = response.pagination.total
     hasMore.value = currentPage.value < response.pagination.totalPages
-
-    // Update filter options based on available data
-    updateFilterOptions(response.records)
   } catch (error) {
     console.error('Failed to fetch records:', error)
+    if (reset) hasError.value = true
   } finally {
     isLoading.value = false
     isLoadingMore.value = false
@@ -138,50 +140,48 @@ async function loadMore() {
   await fetchRecords(false)
 }
 
-// Setup scroll listener
+// Setup scroll listener + initial client-side load
 onMounted(() => {
   window.addEventListener('scroll', handleScroll)
+  fetchRecords(true)
+  loadFilterOptions()
+  loadBackfillStatus()
 })
 
 onUnmounted(() => {
   window.removeEventListener('scroll', handleScroll)
 })
 
-function updateFilterOptions(recordsData: any[]) {
-  const genres = new Set<string>()
-  const styles = new Set<string>()
-  const countries = new Set<string>()
-  const labels = new Set<string>()
-  let minYear = new Date().getFullYear()
-  let maxYear = 1950
-
-  recordsData.forEach(record => {
-    if (record.release.genres) {
-      record.release.genres.forEach((genre: string) => genres.add(genre))
-    }
-    if (record.release.styles) {
-      record.release.styles.forEach((style: string) => styles.add(style))
-    }
-    if (record.release.country) {
-      countries.add(record.release.country)
-    }
-    if (record.release.label) {
-      labels.add(record.release.label)
-    }
-    if (record.release.year) {
-      minYear = Math.min(minYear, record.release.year)
-      maxYear = Math.max(maxYear, record.release.year)
-    }
-  })
-
-  filterOptions.value = {
-    genres: Array.from(genres).sort(),
-    styles: Array.from(styles).sort(),
-    countries: Array.from(countries).sort(),
-    labels: Array.from(labels).sort(),
-    years: { min: minYear, max: maxYear }
+// Load the full set of filter facets across the WHOLE collection (server-side),
+// not just the records currently loaded into the grid.
+async function loadFilterOptions() {
+  try {
+    filterOptions.value = await $fetch('/api/records/filter-options')
+  } catch (error) {
+    console.error('Failed to load filter options:', error)
   }
 }
+
+// ---- Tracklist backfill (shared state via composable) ----
+const {
+  missing: backfillMissing,
+  job: backfillJob,
+  running: backfillRunning,
+  total: backfillTotal,
+  done: backfillDone,
+  percent: backfillPercent,
+  starting: backfillStarting,
+  loadStatus: loadBackfillStatus,
+  start: startBackfill,
+} = useTracklistBackfill()
+
+// When a running backfill finishes, the tracks now exist — refresh grid + facets.
+watch(backfillRunning, (now, was) => {
+  if (was && !now) {
+    fetchRecords(true)
+    loadFilterOptions()
+  }
+})
 
 // Clear search
 function clearSearch() {
@@ -246,6 +246,8 @@ const isAnalyzing = ref(false)
 const analysisJobId = ref<string | null>(null)
 const analysisProgress = ref(0)
 const analysisStatus = ref<string | null>(null)
+let analysisInterval: NodeJS.Timeout | null = null
+let analysisFailures = 0
 
 async function analyzeDJMetadata() {
   if (!confirm('This will analyze all your records to extract BPM, key, and energy data from YouTube. This will take several hours for large collections. Continue?')) {
@@ -275,10 +277,19 @@ async function analyzeDJMetadata() {
   }
 }
 
+function stopAnalysisPolling() {
+  if (analysisInterval) {
+    clearInterval(analysisInterval)
+    analysisInterval = null
+  }
+}
+
 async function pollAnalysisProgress() {
   if (!analysisJobId.value) return
+  analysisFailures = 0
+  stopAnalysisPolling()
 
-  const interval = setInterval(async () => {
+  analysisInterval = setInterval(async () => {
     try {
       const status = await $fetch<{
         jobId: string
@@ -288,80 +299,125 @@ async function pollAnalysisProgress() {
         failed: number
         errorMessage?: string
       }>(`/api/analysis/${analysisJobId.value}`)
+      analysisFailures = 0
 
       analysisProgress.value = status.progress
       analysisStatus.value = status.status
 
       if (status.status === 'completed') {
-        clearInterval(interval)
+        stopAnalysisPolling()
         isAnalyzing.value = false
-        alert(`DJ metadata analysis complete! Analyzed ${status.processed} tracks, ${status.failed} failed.`)
         await fetchRecords() // Reload records
         analysisJobId.value = null
       } else if (status.status === 'failed') {
-        clearInterval(interval)
+        stopAnalysisPolling()
         isAnalyzing.value = false
-        alert(`Analysis failed: ${status.errorMessage}`)
         analysisJobId.value = null
       }
     } catch (error) {
-      console.error('Failed to poll analysis status:', error)
+      // Stop after repeated failures so we don't poll a dead/expired job forever
+      if (++analysisFailures >= 3) {
+        stopAnalysisPolling()
+        isAnalyzing.value = false
+      }
     }
   }, 3000) // Poll every 3 seconds
 }
+
+onUnmounted(stopAnalysisPolling)
 </script>
 
 <template>
-  <div class="min-h-screen bg-dots pb-32" style="background-color: var(--bg-primary);">
-    <!-- Compact Header -->
-    <header class="glass sticky top-0 z-50 border-b" style="border-color: rgba(255, 255, 255, 0.1);">
-      <div class="relative px-4 py-2">
-        <!-- Top Row: Title + Filter -->
-        <div class="flex items-center justify-between mb-2">
-          <div class="flex items-center gap-2">
-            <h1 class="text-base font-bold gradient-text">Collection</h1>
-            <span class="font-mono text-xs neon-text">{{ totalRecords }}</span>
-          </div>
-          <button
-            @click="showFilters = true"
-            class="btn-secondary text-sm px-3 py-1.5 relative"
-            :class="{ 'neon-glow': activeFiltersCount > 0 }"
-          >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.707A1 1 0 013 7V4z"></path>
-            </svg>
-            <div v-if="activeFiltersCount > 0" class="absolute -top-1 -right-1 w-3 h-3 bg-cyan-400 rounded-full flex items-center justify-center">
-              <span class="text-xs font-bold text-black">{{ activeFiltersCount }}</span>
-            </div>
-          </button>
+  <div class="max-w-8xl mx-auto px-4 sm:px-6 pb-24">
+    <!-- Toolbar -->
+    <div class="sticky top-16 z-30 -mx-4 sm:-mx-6 px-4 sm:px-6 py-4 mb-2 backdrop-blur-xl" style="background: rgba(11,11,12,0.7);">
+      <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+        <div class="flex items-center gap-3 shrink-0">
+          <h1 class="display text-2xl sm:text-3xl">Collection</h1>
+          <span class="chip font-mono text-xs">{{ totalRecords }} records</span>
         </div>
 
-        <!-- Search Bar -->
-        <div class="glass glass-hover relative">
+        <!-- Search -->
+        <div class="relative flex-1 sm:max-w-md sm:ml-auto">
+          <svg class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4" style="color: var(--text-tertiary);" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+          </svg>
           <input
             v-model="search"
             type="text"
-            placeholder="Search music..."
-            class="w-full bg-transparent px-4 py-2 pl-10 pr-10 text-sm outline-none placeholder-gray-500"
-            style="color: var(--text-primary);"
+            placeholder="Search artist, title, label…"
+            class="input w-full pl-11 pr-10 py-2.5 text-sm"
           />
-          <div class="absolute left-3 top-1/2 transform -translate-y-1/2">
-            <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-            </svg>
-          </div>
           <button
             v-if="search"
             @click="clearSearch"
-            class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-red-400 transition-colors"
+            class="absolute right-3 top-1/2 -translate-y-1/2 transition-colors"
+            style="color: var(--text-tertiary);"
+            aria-label="Clear search"
           >
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"></path>
             </svg>
           </button>
         </div>
+
+        <!-- Sync button -->
+        <button
+          @click="syncDiscogs"
+          class="btn-secondary !py-2.5 !px-4 text-sm shrink-0"
+          title="Re-sync with Discogs (fetches full tracklists)"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992V4.356M3.985 14.652H-.007v4.992M4.94 9.348a8 8 0 0114.06-2.66l2.018 1.66M19.06 14.652a8 8 0 01-14.06 2.66L2.982 15.652"></path>
+          </svg>
+          <span class="hidden sm:inline">Sync</span>
+        </button>
+
+        <!-- Filter button -->
+        <button
+          @click="showFilters = true"
+          class="btn-secondary !py-2.5 !px-4 text-sm relative shrink-0"
+          :class="{ '!border-[var(--accent)] text-white': activeFiltersCount > 0 }"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.707A1 1 0 013 7V4z"></path>
+          </svg>
+          Filters
+          <span v-if="activeFiltersCount > 0" class="ml-1 inline-flex items-center justify-center min-w-5 h-5 px-1.5 text-xs font-bold rounded-full" style="background: var(--accent); color: #fff;">{{ activeFiltersCount }}</span>
+        </button>
       </div>
-    </header>
+    </div>
+
+    <!-- Tracklist backfill banner -->
+    <div v-if="backfillRunning || backfillMissing > 0" class="surface px-4 py-3 mb-4 flex items-center gap-4">
+      <span class="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style="background: var(--accent-soft);">
+        <svg class="w-4.5 h-4.5" style="color: var(--accent); width:18px; height:18px;" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
+        </svg>
+      </span>
+      <div class="flex-1 min-w-0">
+        <template v-if="backfillRunning">
+          <div class="flex items-center justify-between gap-3">
+            <p class="text-sm font-medium" style="color: var(--text-primary);">Fetching tracklists…</p>
+            <p class="text-sm font-mono font-semibold" style="color: var(--accent);">{{ backfillPercent }}%</p>
+          </div>
+          <div class="w-full h-1.5 rounded-full mt-2 overflow-hidden" style="background: var(--bg-tertiary);">
+            <div class="h-full rounded-full transition-all duration-500" style="background: var(--accent);" :style="{ width: `${backfillPercent}%` }"></div>
+          </div>
+          <p class="text-xs mt-1.5 font-mono" style="color: var(--text-secondary);">
+            {{ backfillDone }} of {{ backfillTotal }} records<span v-if="backfillJob?.failedItems"> · {{ backfillJob.failedItems }} failed</span>
+          </p>
+        </template>
+        <template v-else>
+          <p class="text-sm font-medium" style="color: var(--text-primary);">{{ backfillMissing }} {{ backfillMissing === 1 ? 'record is' : 'records are' }} missing tracklists</p>
+          <p class="text-xs mt-0.5" style="color: var(--text-secondary);">Fetch them to use these records in setlists. Runs in the background (~1s per record).</p>
+        </template>
+      </div>
+      <button v-if="!backfillRunning" @click="startBackfill" :disabled="backfillStarting" class="btn-primary !py-2 !px-4 text-sm shrink-0">
+        {{ backfillStarting ? 'Starting…' : 'Fetch tracklists' }}
+      </button>
+      <div v-else class="w-5 h-5 border-2 rounded-full animate-spin shrink-0" style="border-color: var(--accent); border-top-color: transparent;"></div>
+    </div>
 
     <!-- Filter Slide-in Panel -->
     <Teleport to="body">
@@ -373,9 +429,9 @@ async function pollAnalysisProgress() {
         leave-from-class="opacity-100"
         leave-to-class="opacity-0"
       >
-        <div 
-          v-if="showFilters" 
-          class="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60]"
+        <div
+          v-if="showFilters"
+          class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60]"
           @click="showFilters = false"
         >
           <Transition
@@ -386,224 +442,119 @@ async function pollAnalysisProgress() {
             leave-from-class="translate-x-0"
             leave-to-class="translate-x-full"
           >
-            <div 
+            <div
               v-if="showFilters"
-              class="absolute right-0 top-0 h-full w-full sm:w-96 glass border-l filter-slide filter-panel"
-              style="background: var(--bg-secondary); border-color: rgba(255, 255, 255, 0.1);"
+              class="absolute right-0 top-0 h-full w-full sm:w-[26rem] filter-panel flex flex-col"
+              style="background: var(--bg-secondary); border-left: 1px solid var(--border-subtle);"
               @click.stop
             >
               <!-- Filter Header -->
-              <div class="flex items-center justify-between p-4 border-b" style="border-color: rgba(255, 255, 255, 0.1);">
+              <div class="flex items-center justify-between p-5" style="border-bottom: 1px solid var(--border-subtle);">
                 <div>
-                  <h2 class="text-lg font-bold gradient-text">Filters</h2>
+                  <h2 class="display text-xl">Filters</h2>
                   <p class="text-xs" style="color: var(--text-secondary);">Refine your collection</p>
                 </div>
                 <div class="flex items-center gap-2">
-                  <button 
+                  <button
                     v-if="activeFiltersCount > 0"
                     @click="clearFilters"
-                    class="text-xs px-3 py-1 bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30 transition-colors"
+                    class="btn-ghost text-xs"
+                    style="color: var(--accent);"
                   >
-                    Clear All
+                    Clear all
                   </button>
-                  <button 
+                  <button
                     @click="showFilters = false"
-                    class="w-8 h-8 flex items-center justify-center glass-hover text-gray-400 hover:text-white"
+                    class="w-9 h-9 flex items-center justify-center rounded-full hover:bg-white/[0.06]"
+                    style="color: var(--text-secondary);"
+                    aria-label="Close filters"
                   >
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"></path>
                     </svg>
                   </button>
                 </div>
               </div>
 
               <!-- Filter Content -->
-              <div class="p-4 overflow-y-auto h-full pb-20">
+              <div class="p-5 overflow-y-auto flex-1">
                 <!-- Active Filters -->
                 <div v-if="activeFiltersCount > 0" class="mb-6">
+                  <p class="eyebrow mb-3">Active</p>
                   <div class="flex flex-wrap gap-2">
-                    <button
-                      v-for="genre in filters.genres"
-                      :key="`active-genre-${genre}`"
-                      @click="toggleFilter('genres', genre)"
-                      class="px-2 py-1 text-xs bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/30 transition-colors flex items-center gap-1"
-                    >
+                    <button v-for="genre in filters.genres" :key="`active-genre-${genre}`" @click="toggleFilter('genres', genre)" class="chip chip-active">
                       {{ genre }}
-                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                      </svg>
+                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"></path></svg>
                     </button>
-                    <button
-                      v-for="style in filters.styles"
-                      :key="`active-style-${style}`"
-                      @click="toggleFilter('styles', style)"
-                      class="px-2 py-1 text-xs bg-purple-500/20 text-purple-400 border border-purple-500/30 hover:bg-purple-500/30 transition-colors flex items-center gap-1"
-                    >
+                    <button v-for="style in filters.styles" :key="`active-style-${style}`" @click="toggleFilter('styles', style)" class="chip chip-active">
                       {{ style }}
-                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                      </svg>
+                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"></path></svg>
                     </button>
-                    <button
-                      v-for="country in filters.countries"
-                      :key="`active-country-${country}`"
-                      @click="toggleFilter('countries', country)"
-                      class="px-2 py-1 text-xs bg-green-500/20 text-green-400 border border-green-500/30 hover:bg-green-500/30 transition-colors flex items-center gap-1"
-                    >
+                    <button v-for="country in filters.countries" :key="`active-country-${country}`" @click="toggleFilter('countries', country)" class="chip chip-active">
                       {{ country }}
-                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                      </svg>
+                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"></path></svg>
                     </button>
-                    <button
-                      v-for="label in filters.labels"
-                      :key="`active-label-${label}`"
-                      @click="toggleFilter('labels', label)"
-                      class="px-2 py-1 text-xs bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 hover:bg-yellow-500/30 transition-colors flex items-center gap-1"
-                    >
+                    <button v-for="label in filters.labels" :key="`active-label-${label}`" @click="toggleFilter('labels', label)" class="chip chip-active">
                       {{ label }}
-                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                      </svg>
+                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"></path></svg>
                     </button>
-                    <button
-                      v-if="filters.yearRange.min !== null || filters.yearRange.max !== null"
-                      @click="clearFilter('yearRange')"
-                      class="px-2 py-1 text-xs bg-pink-500/20 text-pink-400 border border-pink-500/30 hover:bg-pink-500/30 transition-colors flex items-center gap-1"
-                    >
-                      {{ filters.yearRange.min || filterOptions.years.min }}-{{ filters.yearRange.max || filterOptions.years.max }}
-                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                      </svg>
+                    <button v-if="filters.yearRange.min !== null || filters.yearRange.max !== null" @click="clearFilter('yearRange')" class="chip chip-active">
+                      {{ filters.yearRange.min || filterOptions.years.min }}–{{ filters.yearRange.max || filterOptions.years.max }}
+                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" d="M6 18L18 6M6 6l12 12"></path></svg>
                     </button>
                   </div>
                 </div>
 
                 <!-- Year Range Filter -->
-                <div v-if="filterOptions.years.min < filterOptions.years.max" class="mb-6">
-                  <h3 class="text-sm font-semibold mb-3 flex items-center gap-2" style="color: var(--text-primary);">
-                    <svg class="w-4 h-4 text-pink-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                    </svg>
-                    Release Year
-                  </h3>
-                  <div class="space-y-3">
-                    <div class="flex items-center gap-3">
-                      <div class="flex-1">
-                        <label class="text-xs" style="color: var(--text-secondary);">From</label>
-                        <input
-                          v-model.number="filters.yearRange.min"
-                          type="number"
-                          :min="filterOptions.years.min"
-                          :max="filterOptions.years.max"
-                          class="w-full mt-1 px-3 py-2 text-sm bg-transparent border border-gray-600 focus:border-pink-400 outline-none transition-colors"
-                          style="color: var(--text-primary);"
-                          :placeholder="filterOptions.years.min.toString()"
-                        />
-                      </div>
-                      <div class="flex-1">
-                        <label class="text-xs" style="color: var(--text-secondary);">To</label>
-                        <input
-                          v-model.number="filters.yearRange.max"
-                          type="number"
-                          :min="filterOptions.years.min"
-                          :max="filterOptions.years.max"
-                          class="w-full mt-1 px-3 py-2 text-sm bg-transparent border border-gray-600 focus:border-pink-400 outline-none transition-colors"
-                          style="color: var(--text-primary);"
-                          :placeholder="filterOptions.years.max.toString()"
-                        />
-                      </div>
+                <div v-if="filterOptions.years.min < filterOptions.years.max" class="mb-7">
+                  <p class="eyebrow mb-3">Release year</p>
+                  <div class="flex items-center gap-3">
+                    <div class="flex-1">
+                      <label class="text-xs" style="color: var(--text-secondary);">From</label>
+                      <input v-model.number="filters.yearRange.min" type="number" :min="filterOptions.years.min" :max="filterOptions.years.max" class="input w-full mt-1 px-3 py-2 text-sm" :placeholder="filterOptions.years.min.toString()" />
+                    </div>
+                    <div class="flex-1">
+                      <label class="text-xs" style="color: var(--text-secondary);">To</label>
+                      <input v-model.number="filters.yearRange.max" type="number" :min="filterOptions.years.min" :max="filterOptions.years.max" class="input w-full mt-1 px-3 py-2 text-sm" :placeholder="filterOptions.years.max.toString()" />
                     </div>
                   </div>
                 </div>
 
                 <!-- Genres Filter -->
-                <div v-if="filterOptions.genres.length > 0" class="mb-6">
-                  <h3 class="text-sm font-semibold mb-3 flex items-center gap-2" style="color: var(--text-primary);">
-                    <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
-                    </svg>
-                    Genres
-                  </h3>
-                  <div class="flex flex-wrap gap-2 max-h-40 overflow-y-auto filter-options">
-                    <button
-                      v-for="genre in filterOptions.genres"
-                      :key="genre"
-                      @click="toggleFilter('genres', genre)"
-                      class="px-3 py-1 text-xs border transition-colors filter-item"
-                      :class="filters.genres.includes(genre) 
-                        ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30' 
-                        : 'bg-gray-800/50 text-gray-400 border-gray-600 hover:border-cyan-500/50'"
-                    >
+                <div v-if="filterOptions.genres.length > 0" class="mb-7">
+                  <p class="eyebrow mb-3">Genres</p>
+                  <div class="flex flex-wrap gap-2 max-h-44 overflow-y-auto filter-options">
+                    <button v-for="genre in filterOptions.genres" :key="genre" @click="toggleFilter('genres', genre)" class="chip filter-item" :class="filters.genres.includes(genre) ? 'chip-active' : ''">
                       {{ genre }}
                     </button>
                   </div>
                 </div>
 
                 <!-- Styles Filter -->
-                <div v-if="filterOptions.styles.length > 0" class="mb-6">
-                  <h3 class="text-sm font-semibold mb-3 flex items-center gap-2" style="color: var(--text-primary);">
-                    <svg class="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path>
-                    </svg>
-                    Styles
-                  </h3>
-                  <div class="flex flex-wrap gap-2 max-h-40 overflow-y-auto filter-options">
-                    <button
-                      v-for="style in filterOptions.styles"
-                      :key="style"
-                      @click="toggleFilter('styles', style)"
-                      class="px-3 py-1 text-xs border transition-colors filter-item"
-                      :class="filters.styles.includes(style) 
-                        ? 'bg-purple-500/20 text-purple-400 border-purple-500/30' 
-                        : 'bg-gray-800/50 text-gray-400 border-gray-600 hover:border-purple-500/50'"
-                    >
+                <div v-if="filterOptions.styles.length > 0" class="mb-7">
+                  <p class="eyebrow mb-3">Styles</p>
+                  <div class="flex flex-wrap gap-2 max-h-44 overflow-y-auto filter-options">
+                    <button v-for="style in filterOptions.styles" :key="style" @click="toggleFilter('styles', style)" class="chip filter-item" :class="filters.styles.includes(style) ? 'chip-active' : ''">
                       {{ style }}
                     </button>
                   </div>
                 </div>
 
                 <!-- Countries Filter -->
-                <div v-if="filterOptions.countries.length > 0" class="mb-6">
-                  <h3 class="text-sm font-semibold mb-3 flex items-center gap-2" style="color: var(--text-primary);">
-                    <svg class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                    </svg>
-                    Countries
-                  </h3>
-                  <div class="flex flex-wrap gap-2 max-h-40 overflow-y-auto filter-options">
-                    <button
-                      v-for="country in filterOptions.countries"
-                      :key="country"
-                      @click="toggleFilter('countries', country)"
-                      class="px-3 py-1 text-xs border transition-colors filter-item"
-                      :class="filters.countries.includes(country) 
-                        ? 'bg-green-500/20 text-green-400 border-green-500/30' 
-                        : 'bg-gray-800/50 text-gray-400 border-gray-600 hover:border-green-500/50'"
-                    >
+                <div v-if="filterOptions.countries.length > 0" class="mb-7">
+                  <p class="eyebrow mb-3">Countries</p>
+                  <div class="flex flex-wrap gap-2 max-h-44 overflow-y-auto filter-options">
+                    <button v-for="country in filterOptions.countries" :key="country" @click="toggleFilter('countries', country)" class="chip filter-item" :class="filters.countries.includes(country) ? 'chip-active' : ''">
                       {{ country }}
                     </button>
                   </div>
                 </div>
 
                 <!-- Labels Filter -->
-                <div v-if="filterOptions.labels.length > 0" class="mb-6">
-                  <h3 class="text-sm font-semibold mb-3 flex items-center gap-2" style="color: var(--text-primary);">
-                    <svg class="w-4 h-4 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z"></path>
-                    </svg>
-                    Labels
-                  </h3>
-                  <div class="flex flex-wrap gap-2 max-h-40 overflow-y-auto filter-options">
-                    <button
-                      v-for="label in filterOptions.labels.slice(0, 50)"
-                      :key="label"
-                      @click="toggleFilter('labels', label)"
-                      class="px-3 py-1 text-xs border transition-colors filter-item"
-                      :class="filters.labels.includes(label) 
-                        ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' 
-                        : 'bg-gray-800/50 text-gray-400 border-gray-600 hover:border-yellow-500/50'"
-                    >
+                <div v-if="filterOptions.labels.length > 0" class="mb-2">
+                  <p class="eyebrow mb-3">Labels</p>
+                  <div class="flex flex-wrap gap-2 max-h-44 overflow-y-auto filter-options">
+                    <button v-for="label in filterOptions.labels.slice(0, 50)" :key="label" @click="toggleFilter('labels', label)" class="chip filter-item" :class="filters.labels.includes(label) ? 'chip-active' : ''">
                       {{ label }}
                     </button>
                   </div>
@@ -612,6 +563,11 @@ async function pollAnalysisProgress() {
                   </p>
                 </div>
               </div>
+
+              <!-- Footer -->
+              <div class="p-4" style="border-top: 1px solid var(--border-subtle);">
+                <button @click="showFilters = false" class="btn-primary w-full">Show results</button>
+              </div>
             </div>
           </Transition>
         </div>
@@ -619,79 +575,70 @@ async function pollAnalysisProgress() {
     </Teleport>
 
     <!-- Collection Grid -->
-    <main class="px-4 py-6">
+    <main class="py-2">
       <!-- Loading State -->
-      <div v-if="isLoading" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3">
-        <div
-          v-for="i in 12"
-          :key="i"
-          class="aspect-square glass scale-in floating"
-          :style="{ 
-            animationDelay: `${i * 50}ms`,
-            animationDuration: `${3 + Math.random() * 3}s`
-          }"
-        >
-          <div class="w-full h-full flex items-center justify-center">
-            <div class="w-8 h-8 neon-glow pulsing" style="background: var(--neon-blue); opacity: 0.3;"></div>
+      <div v-if="isLoading" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 gap-4">
+        <div v-for="i in 14" :key="i" class="space-y-2">
+          <div class="aspect-square skeleton rounded-xl"></div>
+          <div class="h-3 w-3/4 skeleton rounded"></div>
+          <div class="h-3 w-1/2 skeleton rounded"></div>
+        </div>
+      </div>
+
+      <!-- Error State -->
+      <div v-else-if="hasError && records.length === 0" class="flex items-center justify-center min-h-[50vh]">
+        <div class="text-center max-w-sm scale-in px-4">
+          <div class="w-20 h-20 mx-auto surface flex items-center justify-center mb-6">
+            <svg class="w-9 h-9" style="color: var(--accent);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+            </svg>
           </div>
+          <h3 class="display text-2xl mb-3">Couldn't load your collection</h3>
+          <p class="text-sm mb-6" style="color: var(--text-secondary);">Check your connection and try again.</p>
+          <button @click="fetchRecords(true)" class="btn-primary inline-flex">Retry</button>
         </div>
       </div>
 
       <!-- Empty State -->
-      <div v-else-if="records.length === 0" class="flex items-center justify-center min-h-80">
+      <div v-else-if="records.length === 0" class="flex items-center justify-center min-h-[50vh]">
         <div class="text-center max-w-sm scale-in px-4">
-          <div class="relative mb-6">
-            <div class="w-20 h-20 mx-auto glass flex items-center justify-center floating">
-              <svg class="w-10 h-10 text-cyan-400 glowing" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
-              </svg>
-            </div>
+          <div class="w-20 h-20 mx-auto surface flex items-center justify-center mb-6">
+            <svg class="w-9 h-9" style="color: var(--accent);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
+            </svg>
           </div>
-          
-          <h3 class="text-xl font-bold gradient-text-purple mb-3">
-            {{ search ? 'No records found' : 'Your collection awaits' }}
+          <h3 class="display text-2xl mb-3">
+            {{ search || activeFiltersCount ? 'No records found' : 'Your collection awaits' }}
           </h3>
           <p class="text-sm mb-6" style="color: var(--text-secondary);">
-            {{ search ? 'Try adjusting your search terms' : 'Start building your digital crate' }}
+            {{ search || activeFiltersCount ? 'Try adjusting your search or filters' : 'Start building your digital crate.' }}
           </p>
-          
-          <NuxtLink
-            v-if="!search"
-            to="/collection/add"
-            class="btn-primary inline-flex items-center gap-2 text-sm px-4 py-3"
-          >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"></path>
-            </svg>
+          <NuxtLink v-if="!search && !activeFiltersCount" to="/collection/add" class="btn-primary inline-flex">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.2"><path stroke-linecap="round" d="M12 5v14M5 12h14"></path></svg>
             Add your first record
           </NuxtLink>
         </div>
       </div>
 
       <!-- Records Grid -->
-      <div v-else class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3">
+      <div v-else class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 gap-4">
         <NuxtLink
           v-for="(record, index) in records"
           :key="record.id"
           :to="`/collection/${record.id}`"
           class="group stagger-item album-glow"
-          :style="{ animationDelay: `${index * 20}ms` }"
+          :style="{ animationDelay: `${Math.min(index, 20) * 20}ms` }"
         >
           <div class="relative">
             <!-- Album Cover -->
-            <div class="aspect-square glass glass-hover relative overflow-hidden group-hover:scale-105 transition-all duration-300">
-              <!-- Neon border on hover -->
-              <div class="absolute inset-0 neon-glow opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-10"></div>
-              
+            <div class="aspect-square rounded-xl relative overflow-hidden" style="background: var(--bg-tertiary); border: 1px solid var(--border-subtle);">
               <!-- Overlay -->
-              <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-20"></div>
-              
+              <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-20"></div>
+
               <!-- Play Button -->
               <div class="absolute inset-0 flex items-center justify-center z-30 opacity-0 group-hover:opacity-100 transition-all duration-300">
-                <div class="glass w-12 h-12 flex items-center justify-center neon-glow group-hover:scale-110 transition-transform duration-300">
-                  <svg class="w-5 h-5 text-cyan-400 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M8 5v14l11-7z"/>
-                  </svg>
+                <div class="w-12 h-12 rounded-full flex items-center justify-center backdrop-blur-md group-hover:scale-110 transition-transform duration-300" style="background: var(--accent);">
+                  <svg class="w-5 h-5 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
                 </div>
               </div>
 
@@ -699,54 +646,35 @@ async function pollAnalysisProgress() {
                 v-if="record.release.coverUrl || record.release.thumbUrl"
                 :src="record.release.coverUrl || record.release.thumbUrl"
                 :alt="record.release.title"
-                class="w-full h-full object-cover transition-transform duration-500"
+                class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                 loading="lazy"
               />
-              <div v-else class="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-900">
-                <svg class="w-8 h-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div v-else class="w-full h-full flex items-center justify-center">
+                <svg class="w-8 h-8" style="color: var(--text-tertiary);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
                 </svg>
               </div>
             </div>
-            
+
             <!-- Record Info -->
-            <div class="mt-2 space-y-1 group-hover:translate-y-[-1px] transition-transform duration-300">
-              <p class="font-semibold text-xs group-hover:text-cyan-400 transition-colors duration-200 truncate leading-tight" style="color: var(--text-primary);">
+            <div class="mt-2.5 space-y-0.5">
+              <p class="font-semibold text-sm group-hover:text-[var(--accent)] transition-colors duration-200 truncate leading-tight" style="color: var(--text-primary);">
                 {{ record.release.artist || 'Unknown Artist' }}
               </p>
               <p class="text-xs truncate leading-tight" style="color: var(--text-secondary);">
                 {{ record.release.title }}
               </p>
-              <div class="flex items-center gap-1 text-xs">
-                <span v-if="record.release.year" class="font-mono neon-pink text-xs">
-                  {{ record.release.year }}
-                </span>
-                <div v-if="record.release.year && record.release.formats?.length" class="w-0.5 h-0.5 bg-purple-500 rounded-full opacity-60"></div>
-                <span v-if="record.release.formats?.length" class="text-xs" style="color: var(--text-tertiary);">
-                  {{ record.release.formats[0] }}
-                </span>
+              <div class="flex items-center gap-1.5 text-xs pt-0.5">
+                <span v-if="record.release.year" class="font-mono" style="color: var(--text-tertiary);">{{ record.release.year }}</span>
+                <span v-if="record.release.year && record.release.formats?.length" style="color: var(--text-tertiary);">·</span>
+                <span v-if="record.release.formats?.length" class="truncate" style="color: var(--text-tertiary);">{{ record.release.formats[0] }}</span>
               </div>
 
               <!-- DJ Metadata -->
-              <div v-if="record.bpm || record.key || record.energy" class="flex items-center gap-1.5 mt-1.5">
-                <span v-if="record.bpm" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                  <svg class="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-                  </svg>
-                  {{ record.bpm }}
-                </span>
-                <span v-if="record.key" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
-                  <svg class="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
-                  </svg>
-                  {{ record.key }}
-                </span>
-                <span v-if="record.energy" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-pink-500/20 text-pink-300 border border-pink-500/30">
-                  <svg class="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M13 2.05v3.03c3.39.49 6 3.39 6 6.92 0 .9-.18 1.75-.48 2.54l2.6 1.53c.56-1.24.88-2.62.88-4.07 0-5.18-3.95-9.45-9-9.95zM12 19c-3.87 0-7-3.13-7-7 0-3.53 2.61-6.43 6-6.92V2.05c-5.06.5-9 4.76-9 9.95 0 5.52 4.47 10 9.99 10 3.31 0 6.24-1.61 8.06-4.09l-2.6-1.53C16.17 17.98 14.21 19 12 19z"/>
-                  </svg>
-                  {{ record.energy }}/10
-                </span>
+              <div v-if="record.bpm || record.key || record.energy" class="flex flex-wrap items-center gap-1 pt-1">
+                <span v-if="record.bpm" class="chip !px-1.5 !py-0.5 !text-[10px] font-mono">{{ record.bpm }} BPM</span>
+                <span v-if="record.key" class="chip !px-1.5 !py-0.5 !text-[10px] font-mono">{{ record.key }}</span>
+                <span v-if="record.energy" class="chip !px-1.5 !py-0.5 !text-[10px] font-mono">E{{ record.energy }}</span>
               </div>
             </div>
           </div>
@@ -754,86 +682,17 @@ async function pollAnalysisProgress() {
       </div>
 
       <!-- Load More Indicator -->
-      <div v-if="isLoadingMore" class="flex items-center justify-center py-8">
+      <div v-if="isLoadingMore" class="flex items-center justify-center py-10">
         <div class="text-center">
-          <div class="w-8 h-8 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
-          <p class="text-sm text-gray-400">Loading more records...</p>
+          <div class="w-7 h-7 border-2 border-t-transparent rounded-full animate-spin mx-auto mb-2" style="border-color: var(--accent); border-top-color: transparent;"></div>
+          <p class="text-sm" style="color: var(--text-tertiary);">Loading more…</p>
         </div>
       </div>
 
       <!-- End of List Indicator -->
-      <div v-else-if="!hasMore && records.length > 0" class="flex items-center justify-center py-8">
-        <p class="text-sm text-gray-500">You've reached the end of your collection</p>
+      <div v-else-if="!hasMore && records.length > 0" class="flex items-center justify-center py-10">
+        <p class="text-sm" style="color: var(--text-tertiary);">You've reached the end of your collection.</p>
       </div>
     </main>
-
-    <!-- Fixed Add Record Button -->
-    <div class="fixed bottom-16 left-0 right-0 z-40 p-4 bg-gradient-to-t from-black via-black/95 to-transparent pointer-events-none">
-      <div class="max-w-7xl mx-auto pointer-events-auto">
-        <NuxtLink
-          to="/collection/add"
-          class="w-full flex items-center justify-center gap-2 px-6 py-4 bg-gradient-to-r from-cyan-600 to-purple-600 text-white text-base font-semibold rounded-xl hover:from-cyan-500 hover:to-purple-500 transition-all shadow-xl neon-glow"
-          style="box-shadow: 0 0 20px rgba(6, 182, 212, 0.3);"
-        >
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"></path>
-          </svg>
-          Add Record
-        </NuxtLink>
-      </div>
-    </div>
-
-    <!-- Fixed Bottom Navigation -->
-    <nav class="fixed bottom-0 left-0 right-0 z-50 glass border-t" style="border-color: rgba(255, 255, 255, 0.1); background: var(--bg-secondary);">
-      <div class="flex items-center justify-around px-2 py-2">
-        <!-- Collection -->
-        <NuxtLink
-          to="/collection"
-          class="flex flex-col items-center gap-1 px-4 py-2 transition-colors group"
-          active-class="text-cyan-400"
-        >
-          <svg class="w-5 h-5 group-[.router-link-active]:neon-glow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
-          </svg>
-          <span class="text-xs font-medium">Collection</span>
-        </NuxtLink>
-
-        <!-- Shelves -->
-        <NuxtLink
-          to="/shelves"
-          class="flex flex-col items-center gap-1 px-4 py-2 transition-colors group"
-          active-class="text-cyan-400"
-        >
-          <svg class="w-5 h-5 group-[.router-link-active]:neon-glow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"></path>
-          </svg>
-          <span class="text-xs font-medium">Shelves</span>
-        </NuxtLink>
-
-        <!-- Setlists -->
-        <NuxtLink
-          to="/setlists"
-          class="flex flex-col items-center gap-1 px-4 py-2 transition-colors group"
-          active-class="text-cyan-400"
-        >
-          <svg class="w-5 h-5 group-[.router-link-active]:neon-glow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
-          </svg>
-          <span class="text-xs font-medium">Setlists</span>
-        </NuxtLink>
-
-        <!-- Stats -->
-        <NuxtLink
-          to="/stats"
-          class="flex flex-col items-center gap-1 px-4 py-2 transition-colors group"
-          active-class="text-cyan-400"
-        >
-          <svg class="w-5 h-5 group-[.router-link-active]:neon-glow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
-          </svg>
-          <span class="text-xs font-medium">Stats</span>
-        </NuxtLink>
-      </div>
-    </nav>
   </div>
 </template>

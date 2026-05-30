@@ -12,6 +12,7 @@ export default {
     extend: {
       fontFamily: {
         sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        display: ['Space Grotesk', 'Inter', 'sans-serif'],
         mono: ['JetBrains Mono', 'Monaco', 'Consolas', 'monospace'],
       },
       fontSize: {
@@ -43,19 +44,33 @@ export default {
         '1': '1px',
       },
       colors: {
-        // Dark theme colors
-        dark: {
-          primary: '#0a0a0a',
-          secondary: '#111111',
-          tertiary: '#1a1a1a',
+        // Near-black surfaces
+        ink: {
+          DEFAULT: '#0b0b0c',
+          900: '#0b0b0c',
+          800: '#161618',
+          700: '#1f1f22',
+          600: '#242428',
         },
-        // Neon colors
+        dark: {
+          primary: '#0b0b0c',
+          secondary: '#161618',
+          tertiary: '#1f1f22',
+        },
+        // Brand — electric coral
+        accent: {
+          DEFAULT: '#ff4d3d',
+          hover: '#ff6555',
+          press: '#e6402f',
+          soft: 'rgba(255, 77, 61, 0.12)',
+        },
+        // Legacy neon keys remapped to coral family so stray usages stay on-brand
         neon: {
-          blue: '#00f5ff',
-          pink: '#fc00ff',
-          green: '#39ff14',
-          yellow: '#ffd93d',
-          purple: '#bf00ff',
+          blue: '#ff4d3d',
+          pink: '#ff6555',
+          green: '#ff4d3d',
+          yellow: '#ffb03d',
+          purple: '#ff4d3d',
         },
         gray: {
           50: '#f9fafb',

@@ -45,8 +45,11 @@ export default defineNuxtConfig({
     client: {
       installPrompt: true,
     },
+    // Dev service worker disabled: vite-plugin-pwa lazily builds
+    // .nuxt/dev-sw-dist/sw.js and Vite can try to load it before it exists
+    // (ENOENT). The PWA is still generated for production `nuxt build`.
     devOptions: {
-      enabled: true,
+      enabled: false,
       type: 'module',
     },
   },

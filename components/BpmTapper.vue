@@ -1,13 +1,13 @@
 <template>
-  <div class="bg-white dark:bg-gray-800 rounded-lg p-6">
-    <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">BPM Tapper</h3>
+  <div class="surface p-6">
+    <p class="eyebrow mb-4">BPM Tapper</p>
 
     <!-- BPM Display -->
     <div class="text-center mb-6">
-      <div class="text-6xl font-bold text-blue-600 dark:text-blue-400 mb-2">
+      <div class="display text-6xl mb-2" style="color: var(--accent);">
         {{ displayBpm }}
       </div>
-      <div class="text-sm text-gray-500 dark:text-gray-400">
+      <div class="text-sm" style="color: var(--text-tertiary);">
         {{ taps.length > 0 ? `${taps.length} taps` : 'Tap to start' }}
       </div>
     </div>
@@ -16,38 +16,36 @@
     <button
       @click="tap"
       @keydown.space.prevent="tap"
-      class="w-full py-8 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-xl font-bold rounded-lg transition-colors mb-4 focus:outline-none focus:ring-4 focus:ring-blue-300"
+      class="w-full py-8 text-white text-xl font-bold rounded-2xl transition-all mb-4 focus:outline-none active:scale-[0.99]"
+      style="background: var(--accent); font-family: 'Space Grotesk', sans-serif; letter-spacing: 0.1em;"
     >
       TAP
     </button>
 
     <!-- Manual Input -->
     <div class="mb-4">
-      <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-        Or enter manually
-      </label>
+      <label class="block text-sm font-medium mb-2" style="color: var(--text-secondary);">Or enter manually</label>
       <input
         v-model.number="manualBpm"
         type="number"
         min="1"
         max="300"
         placeholder="Enter BPM"
-        class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        class="input w-full px-4 py-2.5"
         @input="onManualInput"
       />
     </div>
 
     <!-- Common BPM Presets -->
     <div class="mb-6">
-      <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-        Quick presets
-      </label>
+      <label class="block text-sm font-medium mb-2" style="color: var(--text-secondary);">Quick presets</label>
       <div class="grid grid-cols-4 gap-2">
         <button
           v-for="preset in presets"
           :key="preset"
           @click="setPreset(preset)"
-          class="px-3 py-2 text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+          class="chip justify-center !py-2 font-mono"
+          :class="manualBpm === preset ? 'chip-active' : ''"
         >
           {{ preset }}
         </button>
@@ -55,25 +53,14 @@
     </div>
 
     <!-- Actions -->
-    <div class="flex space-x-3">
-      <button
-        @click="reset"
-        class="flex-1 px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-      >
-        Reset
-      </button>
-      <button
-        v-if="displayBpm !== '--'"
-        @click="useBpm"
-        class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-      >
-        Use {{ displayBpm }} BPM
-      </button>
+    <div class="flex gap-3">
+      <button @click="reset" class="btn-secondary flex-1">Reset</button>
+      <button v-if="displayBpm !== '--'" @click="useBpm" class="btn-primary flex-1">Use {{ displayBpm }} BPM</button>
     </div>
 
     <!-- Help Text -->
-    <div class="mt-4 text-xs text-gray-500 dark:text-gray-400 text-center">
-      Press SPACE or click TAP button in rhythm. Tap counter resets after 3 seconds of inactivity.
+    <div class="mt-4 text-xs text-center" style="color: var(--text-tertiary);">
+      Press SPACE or click TAP in rhythm. The counter resets after 3 seconds of inactivity.
     </div>
   </div>
 </template>

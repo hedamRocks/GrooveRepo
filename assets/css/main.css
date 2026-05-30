@@ -1,4 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 @tailwind base;
@@ -7,47 +8,43 @@
 
 @layer base {
   :root {
-    /* Dark theme colors */
-    --bg-primary: #0a0a0a;
-    --bg-secondary: #111111;
-    --bg-tertiary: #1a1a1a;
-    --bg-glass: rgba(255, 255, 255, 0.05);
-    --bg-glass-hover: rgba(255, 255, 255, 0.08);
-    
-    /* Text colors */
-    --text-primary: #ffffff;
-    --text-secondary: #a1a1a1;
-    --text-tertiary: #525252;
-    
-    /* Accent gradients */
-    --gradient-primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    --gradient-neon: linear-gradient(135deg, #00f5ff 0%, #fc00ff 100%);
-    --gradient-warm: linear-gradient(135deg, #ff6b6b 0%, #ffd93d 100%);
-    --gradient-cool: linear-gradient(135deg, #4ecdc4 0%, #44a08d 100%);
-    --gradient-purple: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
-    
-    /* Neon colors */
-    --neon-blue: #00f5ff;
-    --neon-pink: #fc00ff;
-    --neon-green: #39ff14;
-    --neon-yellow: #ffd93d;
-    
-    /* Shadows */
-    --shadow-glass: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
-    --shadow-neon: 0 0 20px rgba(0, 245, 255, 0.3);
-    --shadow-intense: 0 25px 50px -12px rgba(0, 0, 0, 0.8);
-    
-    /* Borders */
-    --border-glass: 1px solid rgba(255, 255, 255, 0.1);
-    --border-glow: 1px solid rgba(0, 245, 255, 0.3);
-  }
+    /* Surfaces — near-black, layered */
+    --bg-primary: #0b0b0c;
+    --bg-secondary: #161618;
+    --bg-tertiary: #1f1f22;
+    --bg-elevated: #242428;
 
-  * {
-    border-radius: 0 !important;
+    /* Hairline borders */
+    --border-subtle: rgba(255, 255, 255, 0.08);
+    --border-strong: rgba(255, 255, 255, 0.14);
+
+    /* Text */
+    --text-primary: #ffffff;
+    --text-secondary: #a8a8ad;
+    --text-tertiary: #87878d;
+
+    /* Brand — electric coral */
+    --accent: #ff4d3d;
+    --accent-hover: #ff6555;
+    --accent-press: #e6402f;
+    --accent-soft: rgba(255, 77, 61, 0.12);
+    --accent-glow: rgba(255, 77, 61, 0.35);
+
+    /* Elevation */
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.45);
+    --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.55);
+
+    /* Radius scale */
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-xl: 24px;
   }
 
   html {
     scroll-behavior: smooth;
+    background: var(--bg-primary);
   }
 
   body {
@@ -55,321 +52,257 @@
     background: var(--bg-primary);
     color: var(--text-primary);
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
-    font-weight: 300;
-    letter-spacing: -0.01em;
+    font-weight: 400;
+    letter-spacing: -0.011em;
     line-height: 1.6;
   }
 
-  /* Scrollbar styling */
-  ::-webkit-scrollbar {
-    width: 6px;
-  }
-  
-  ::-webkit-scrollbar-track {
-    background: var(--bg-secondary);
-  }
-  
-  ::-webkit-scrollbar-thumb {
-    background: var(--text-tertiary);
-  }
-  
-  ::-webkit-scrollbar-thumb:hover {
-    background: var(--text-secondary);
-  }
-
+  /* Display headings — geometric, bold, tight */
   h1, h2, h3, h4, h5, h6 {
-    font-weight: 600;
-    letter-spacing: -0.03em;
-    line-height: 1.1;
+    font-family: 'Space Grotesk', 'Inter', sans-serif;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.05;
     color: var(--text-primary);
   }
 
-  /* Glass morphism */
-  .glass {
-    background: var(--bg-glass);
-    backdrop-filter: blur(20px);
-    border: var(--border-glass);
-    box-shadow: var(--shadow-glass);
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #2a2a2e; border-radius: 999px; }
+  ::-webkit-scrollbar-thumb:hover { background: #38383d; }
+
+  ::selection {
+    background: var(--accent);
+    color: #ffffff;
   }
 
-  .glass-hover:hover {
-    background: var(--bg-glass-hover);
-    border: var(--border-glow);
-    box-shadow: var(--shadow-neon);
+  /* Native select option popups render with OS colors — force dark so they stay readable */
+  select option {
+    background: #161618;
+    color: #ffffff;
   }
 
-  /* Neon effects */
-  .neon-text {
-    color: var(--neon-blue);
-    text-shadow: 0 0 10px rgba(0, 245, 255, 0.5);
+  /* Keyboard focus — visible accent ring on all interactive controls */
+  a:focus-visible,
+  button:focus-visible,
+  select:focus-visible,
+  [tabindex]:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+  /* Pointer users don't get the ring */
+  a:focus:not(:focus-visible),
+  button:focus:not(:focus-visible) {
+    outline: none;
   }
 
-  .neon-glow {
-    box-shadow: 0 0 20px rgba(0, 245, 255, 0.3),
-                0 0 40px rgba(0, 245, 255, 0.1),
-                inset 0 0 20px rgba(0, 245, 255, 0.1);
-    border: 1px solid rgba(0, 245, 255, 0.3);
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+      scroll-behavior: auto !important;
+    }
   }
+}
 
-  .neon-pink {
-    color: var(--neon-pink);
-    text-shadow: 0 0 10px rgba(252, 0, 255, 0.5);
-  }
-
-  /* Gradient text */
-  .gradient-text {
-    background: var(--gradient-neon);
-    background-clip: text;
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-size: 200% 200%;
-    animation: gradientFlow 4s ease-in-out infinite;
-  }
-
-  .gradient-text-purple {
-    background: var(--gradient-purple);
-    background-clip: text;
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-size: 200% 200%;
-    animation: gradientFlow 6s ease-in-out infinite;
-  }
-
-  /* Modern buttons - Mobile First */
-  .btn-primary {
-    background: var(--gradient-neon);
-    border: none;
-    color: var(--bg-primary);
+@layer components {
+  /* ---- Eyebrow / section label ---- */
+  .eyebrow {
+    font-family: 'Space Grotesk', sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
     font-weight: 600;
-    padding: 0.75rem 1.5rem;
-    position: relative;
-    overflow: hidden;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    min-height: 44px; /* iOS touch target */
+    font-size: 0.7rem;
+    color: var(--text-tertiary);
+  }
+
+  .display {
+    font-family: 'Space Grotesk', 'Inter', sans-serif;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    line-height: 0.98;
+  }
+
+  /* ---- Surfaces (replaces glassmorphism) ---- */
+  .glass {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .surface {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+  }
+
+  .surface-2 {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+  }
+
+  .glass-hover {
+    transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  .glass-hover:hover {
+    background: var(--bg-tertiary);
+    border-color: var(--border-strong);
+    box-shadow: var(--shadow-md);
+  }
+
+  /* ---- Buttons — pill CTAs ---- */
+  .btn-primary {
+    background: var(--accent);
+    border: 1px solid transparent;
+    color: #ffffff;
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    padding: 0.7rem 1.4rem;
+    border-radius: 999px;
+    transition: all 0.18s ease;
+    min-height: 44px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
+    cursor: pointer;
   }
-
   .btn-primary:hover {
+    background: var(--accent-hover);
     transform: translateY(-1px);
-    box-shadow: var(--shadow-neon);
+    box-shadow: 0 8px 24px var(--accent-glow);
   }
+  .btn-primary:active { transform: translateY(0); background: var(--accent-press); }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
 
   .btn-secondary {
     background: transparent;
-    border: var(--border-glow);
+    border: 1px solid var(--border-strong);
     color: var(--text-primary);
+    font-family: 'Space Grotesk', sans-serif;
     font-weight: 500;
-    padding: 0.75rem 1.5rem;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    min-height: 44px; /* iOS touch target */
+    padding: 0.7rem 1.4rem;
+    border-radius: 999px;
+    transition: all 0.18s ease;
+    min-height: 44px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
+    cursor: pointer;
   }
-
   .btn-secondary:hover {
-    background: var(--bg-glass);
-    border: var(--border-glow);
-    box-shadow: var(--shadow-neon);
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.28);
     transform: translateY(-1px);
   }
 
-  /* Mobile-optimized text sizes */
-  @media (max-width: 640px) {
-    .btn-primary, .btn-secondary {
-      padding: 0.5rem 1rem;
-      font-size: 0.875rem;
-    }
-    
-    .gradient-text {
-      background-size: 300% 300%;
-    }
-    
-    /* Reduced motion on mobile */
-    .floating {
-      animation-duration: 8s;
-    }
-    
-    /* Faster transitions on mobile */
-    .glass-hover:hover {
-      transition-duration: 0.2s;
-    }
+  .btn-ghost {
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--text-secondary);
+    font-weight: 500;
+    padding: 0.55rem 0.9rem;
+    border-radius: 999px;
+    transition: all 0.18s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    cursor: pointer;
+  }
+  .btn-ghost:hover { color: var(--text-primary); background: rgba(255, 255, 255, 0.06); }
+
+  /* ---- Chips / pills ---- */
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.3rem 0.7rem;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 500;
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    transition: all 0.15s ease;
+  }
+  .chip-active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #ffffff;
   }
 
-  /* Animations */
-  @keyframes gradientFlow {
-    0%, 100% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
+  /* ---- Accent text ---- */
+  .accent-text { color: var(--accent); }
+  .neon-text { color: var(--accent); }
+  .gradient-text { color: var(--text-primary); }
+
+  /* ---- Inputs ---- */
+  .input, .glass-input {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .input::placeholder, .glass-input::placeholder { color: var(--text-tertiary); }
+  .input:focus, .glass-input:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
   }
 
-  @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
+  /* ---- Card hover lift for media ---- */
+  .album-glow { transition: transform 0.25s ease; }
+  .album-glow:hover { transform: translateY(-4px); }
+
+  /* ---- Icon buttons (keyboard/touch friendly hover, replaces inline JS) ---- */
+  .icon-btn {
+    color: var(--text-tertiary);
+    transition: color 0.15s ease, background 0.15s ease;
+  }
+  .icon-btn:hover, .icon-btn:focus-visible { color: var(--accent); }
+  .icon-danger {
+    color: var(--text-tertiary);
+    transition: color 0.15s ease, background 0.15s ease;
+  }
+  .icon-danger:hover, .icon-danger:focus-visible { color: #ff6b6b; }
+}
+
+@layer utilities {
+  .bg-grain {
+    background-image: radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.04) 1px, transparent 0);
+    background-size: 22px 22px;
   }
 
-  @keyframes float {
-    0%, 100% { transform: translateY(0px); }
-    50% { transform: translateY(-20px); }
+  /* Animations (tamed) */
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes slideUp { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes slideDown { from { opacity: 0; transform: translateY(-24px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes scaleIn { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: scale(1); } }
+  @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+
+  .slide-up { animation: slideUp 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+  .slide-down { animation: slideDown 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+  .scale-in { animation: scaleIn 0.35s ease-out forwards; }
+  .fade-in { animation: fadeIn 0.5s ease-out forwards; }
+  .stagger-item { opacity: 0; animation: fadeIn 0.5s ease-out forwards; }
+
+  /* Skeleton shimmer */
+  .skeleton {
+    background: linear-gradient(90deg, #161618 25%, #1f1f22 50%, #161618 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.4s infinite;
   }
 
-  @keyframes glow {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.7; }
-  }
-
-  @keyframes slideUp {
-    from { 
-      opacity: 0;
-      transform: translateY(30px);
-    }
-    to { 
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  @keyframes slideDown {
-    from { 
-      opacity: 0;
-      transform: translateY(-30px);
-    }
-    to { 
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  @keyframes scaleIn {
-    from { 
-      opacity: 0;
-      transform: scale(0.9);
-    }
-    to { 
-      opacity: 1;
-      transform: scale(1);
-    }
-  }
-
-  @keyframes staggerIn {
-    from {
-      opacity: 0;
-      transform: translateY(20px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  /* Utility classes */
-  .floating {
-    animation: float 6s ease-in-out infinite;
-  }
-
-  .pulsing {
-    animation: pulse 2s ease-in-out infinite;
-  }
-
-  .glowing {
-    animation: glow 3s ease-in-out infinite;
-  }
-
-  .slide-up {
-    animation: slideUp 0.6s ease-out forwards;
-  }
-
-  .slide-down {
-    animation: slideDown 0.6s ease-out forwards;
-  }
-
-  .scale-in {
-    animation: scaleIn 0.4s ease-out forwards;
-  }
-
-  .stagger-item {
-    opacity: 0;
-    animation: staggerIn 0.6s ease-out forwards;
-  }
-
-  /* Form styling */
-  .glass-input {
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-  }
-
-  .glass-input:focus {
-    border-color: var(--neon-blue);
-    box-shadow: 0 0 20px rgba(0, 245, 255, 0.3);
-  }
-
-  /* Dark theme background patterns */
-  .bg-dots {
-    background-image: radial-gradient(circle, rgba(255, 255, 255, 0.1) 1px, transparent 1px);
-    background-size: 20px 20px;
-  }
-
-  .bg-grid {
-    background-image: 
-      linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
-    background-size: 50px 50px;
-  }
-
-  /* Special effects for album covers */
-  .album-glow {
-    position: relative;
-  }
-
-  .album-glow::before {
-    content: '';
-    position: absolute;
-    inset: -2px;
-    background: var(--gradient-neon);
-    opacity: 0;
-    transition: opacity 0.3s ease;
-    z-index: -1;
-  }
-
-  .album-glow:hover::before {
-    opacity: 0.7;
-  }
-
-  /* Custom selection */
-  ::selection {
-    background: rgba(0, 245, 255, 0.2);
-    color: var(--neon-blue);
-  }
-
-  /* Filter slide-in styles */
-  .filter-slide {
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-  }
-
-  /* Improve touch interaction on mobile */
-  @media (max-width: 768px) {
-    .filter-item {
-      min-height: 44px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .filter-panel {
-      touch-action: manipulation;
-    }
-    
-    /* Hide scrollbar but keep scrolling */
-    .filter-options::-webkit-scrollbar {
-      display: none;
-    }
-    .filter-options {
-      -ms-overflow-style: none;
-      scrollbar-width: none;
-    }
-  }
+  /* Legacy no-ops kept so existing markup doesn't break */
+  .floating, .pulsing, .glowing, .neon-glow, .neon-pink { }
 }
