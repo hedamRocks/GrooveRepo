@@ -139,12 +139,27 @@
 
               <div class="flex flex-wrap gap-1.5 items-center">
                 <span class="chip !py-0.5 !px-2 font-mono uppercase !text-[10px]">{{ setlistTrack.track.position }}</span>
-                <button @click="openBpmModal(setlistTrack)" class="chip chip-active !py-0.5 !px-2 font-mono !text-[10px]">
+                <button @click="openBpmModal(setlistTrack)" class="chip chip-active !py-0.5 !px-2 font-mono !text-[10px]" title="Tap to set BPM">
                   <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
                   </svg>
                   {{ setlistTrack.manualBpm || setlistTrack.track.bpm || '—' }}
                 </button>
+                <!-- One-tap octave fix (the common half/double-time error) -->
+                <template v-if="setlistTrack.manualBpm || setlistTrack.track.bpm">
+                  <button @click.stop="quickOctave(setlistTrack, 0.5)" class="chip !py-0.5 !px-1.5 font-mono !text-[10px]" title="Halve BPM">÷2</button>
+                  <button @click.stop="quickOctave(setlistTrack, 2)" class="chip !py-0.5 !px-1.5 font-mono !text-[10px]" title="Double BPM">×2</button>
+                </template>
+                <span v-if="setlistTrack.track.key" class="chip !py-0.5 !px-2 font-mono !text-[10px]" title="Detected key">{{ setlistTrack.track.key }}</span>
+                <span
+                  v-if="setlistTrack.track.needsReview"
+                  class="chip !py-0.5 !px-2 !text-[10px] inline-flex items-center gap-1"
+                  style="border-color: var(--accent); color: var(--accent);"
+                  title="Low-confidence analysis — verify BPM/key"
+                >
+                  <svg class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" /></svg>
+                  verify
+                </span>
                 <span v-if="setlistTrack.track.userRecord?.release?.country" class="chip !py-0.5 !px-2 !text-[10px]">{{ setlistTrack.track.userRecord.release.country }}</span>
               </div>
 
@@ -474,6 +489,9 @@ interface Track {
   title: string
   artist: string
   bpm: number | null
+  key?: string | null
+  keyConfidence?: number | null
+  needsReview?: boolean
   createdAt?: string
   userRecord?: {
     release?: {
@@ -723,6 +741,23 @@ function openBpmModal(setlistTrack: SetlistTrack) {
 async function handleBpmSelected(bpm: number) {
   manualBpm.value = bpm
   await updateBpm()
+}
+
+// One-tap octave correction (½× / 2×) — the common BPM-detection error.
+async function quickOctave(setlistTrack: SetlistTrack, factor: number) {
+  const current = setlistTrack.manualBpm || setlistTrack.track.bpm
+  if (!current) return
+  const newBpm = Math.round(current * factor)
+  if (newBpm < 40 || newBpm > 300) return
+  try {
+    await $fetch(`/api/setlists/${setlist.value!.id}/tracks/update-bpm`, {
+      method: 'POST',
+      body: { trackId: setlistTrack.trackId, manualBpm: newBpm }
+    })
+    await fetchSetlist()
+  } catch (error) {
+    console.error('Failed to update BPM:', error)
+  }
 }
 
 async function updateBpm() {

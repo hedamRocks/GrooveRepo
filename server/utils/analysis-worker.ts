@@ -248,9 +248,10 @@ async function processTrack(params: {
 
   console.log(`[Analysis Worker] Resolved to YouTube: ${resolvedVideo.videoId} (${resolvedVideo.duration}s)`)
 
-  // Step 2: Download audio with smart sampling (30s @ 20% into track)
+  // Step 2: Download audio with smart sampling (60s @ 20% into track).
+  // 60s gives the analyzer 3 windows to reach a BPM consensus across the track.
   const sampleStart = Math.floor(resolvedVideo.duration * 0.20) // 20% into the track
-  const sampleDuration = 30 // 30 seconds
+  const sampleDuration = 60 // 60 seconds
 
   const audioBuffer = await downloadAudioToBuffer({
     videoId: resolvedVideo.videoId,
@@ -280,7 +281,14 @@ async function processTrack(params: {
   // Step 5: Normalize energy
   const normalizedEnergy = await normalizeEnergy(features.rawEnergy)
 
-  console.log(`[Analysis Worker] Normalized: BPM=${normalizedBPM.bpm}, Energy=${normalizedEnergy.toFixed(3)}`)
+  // Flag low-confidence results for manual verification (the assisted workflow):
+  // trust the confident majority, tap-check the tricky few.
+  const needsReview =
+    features.bpmConfidence < 0.8 ||
+    features.keyConfidence < 0.6 ||
+    features.key === 'Unknown'
+
+  console.log(`[Analysis Worker] Normalized: BPM=${normalizedBPM.bpm}, Energy=${normalizedEnergy.toFixed(3)}, needsReview=${needsReview}`)
 
   // Step 6: Update Track with metadata (with retry)
   await retryWithBackoff(
@@ -294,6 +302,8 @@ async function processTrack(params: {
           key: features.key,
           energy: Math.round(normalizedEnergy * 10), // Store as 0-10 scale
           confidence: features.bpmConfidence,
+          keyConfidence: features.keyConfidence,
+          needsReview,
           analyzedAt: new Date()
         }
       })
