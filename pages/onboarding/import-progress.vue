@@ -3,6 +3,7 @@
  * Import progress screen
  * Polls import job status and shows progress
  */
+definePageMeta({ layout: 'blank' })
 
 const router = useRouter()
 const jobId = ref<string | null>(null)
@@ -65,36 +66,33 @@ function startPolling() {
 </script>
 
 <template>
-  <div class="min-h-screen flex items-center justify-center p-4" style="background: var(--bg-primary);">
-    <div class="max-w-2xl w-full">
-      <div class="glass p-8 md:p-12" style="background: var(--bg-secondary); box-shadow: var(--shadow-glass);">
+  <div class="min-h-screen flex items-center justify-center p-4 bg-grain" style="background: var(--bg-primary);">
+    <div class="max-w-xl w-full">
+      <div class="surface p-8 md:p-12" style="box-shadow: var(--shadow-lg);">
         <!-- Success State -->
-        <div v-if="status === 'completed'" class="text-center">
-          <div class="w-20 h-20 glass rounded-full flex items-center justify-center mx-auto mb-6" style="background: var(--bg-glass);">
-            <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color: var(--neon-green);">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+        <div v-if="status === 'completed'" class="text-center scale-in">
+          <div class="w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-6" style="background: var(--accent-soft); border: 1px solid var(--border-subtle);">
+            <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color: var(--accent);">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M5 13l4 4L19 7"></path>
             </svg>
           </div>
-          <h1 class="text-3xl font-bold gradient-text mb-3">Import complete!</h1>
+          <h1 class="display text-3xl mb-3">Import complete</h1>
           <p class="text-lg mb-4" style="color: var(--text-secondary);">
-            Imported {{ totalItems }} records from your Discogs collection
+            Imported {{ totalItems }} records from your Discogs collection.
           </p>
-          <p style="color: var(--text-tertiary);">Redirecting to your collection...</p>
+          <p style="color: var(--text-tertiary);">Redirecting to your collection…</p>
         </div>
 
         <!-- Error State -->
         <div v-else-if="status === 'failed'" class="text-center">
-          <div class="w-20 h-20 glass rounded-full flex items-center justify-center mx-auto mb-6" style="background: var(--bg-glass);">
-            <svg class="w-10 h-10 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          <div class="w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-6" style="background: rgba(255,77,61,0.1); border: 1px solid var(--border-subtle);">
+            <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color: var(--accent);">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M6 18L18 6M6 6l12 12"></path>
             </svg>
           </div>
-          <h1 class="text-3xl font-bold gradient-text mb-3">Import failed</h1>
+          <h1 class="display text-3xl mb-3">Import failed</h1>
           <p class="text-lg mb-6" style="color: var(--text-secondary);">{{ errorMessage }}</p>
-          <button
-            @click="router.push('/onboarding/connect-discogs')"
-            class="btn-primary py-3 px-6"
-          >
+          <button @click="router.push('/onboarding/connect-discogs')" class="btn-primary">
             Try again
           </button>
         </div>
@@ -103,48 +101,48 @@ function startPolling() {
         <div v-else class="text-center">
           <!-- Vinyl Record Animation -->
           <div class="w-24 h-24 mx-auto mb-8 relative">
-            <div class="absolute inset-0 bg-gradient-to-br from-purple-600 to-indigo-600 rounded-full animate-spin" style="animation-duration: 2s;"></div>
-            <div class="absolute inset-4 bg-white rounded-full"></div>
+            <div class="absolute inset-0 rounded-full animate-spin" style="animation-duration: 2.4s; background: conic-gradient(from 0deg, #1f1f22, #2a2a2e, #1f1f22);"></div>
+            <div class="absolute inset-[6px] rounded-full" style="background: #0b0b0c; border: 1px solid var(--border-subtle);"></div>
             <div class="absolute inset-0 flex items-center justify-center">
-              <div class="w-8 h-8 bg-gradient-to-br from-purple-600 to-indigo-600 rounded-full"></div>
+              <div class="w-7 h-7 rounded-full" style="background: var(--accent);"></div>
+            </div>
+            <div class="absolute inset-0 flex items-center justify-center">
+              <div class="w-1.5 h-1.5 rounded-full bg-black"></div>
             </div>
           </div>
 
-          <h1 class="text-3xl font-bold text-gray-900 mb-3">
-            Importing your collection
-          </h1>
-          <p class="text-lg text-gray-600 mb-8">
-            This may take a few minutes depending on your collection size
+          <p class="eyebrow mb-3">Step 2 of 2</p>
+          <h1 class="display text-3xl mb-3">Importing your collection</h1>
+          <p class="text-base mb-8" style="color: var(--text-secondary);">
+            This may take a few minutes depending on your collection size.
           </p>
 
           <!-- Progress Bar -->
           <div class="mb-6">
-            <div class="flex justify-between text-sm text-gray-600 mb-2">
-              <span>{{ processedItems }} / {{ totalItems || '...' }} records</span>
-              <span>{{ progress }}%</span>
+            <div class="flex justify-between text-sm mb-2 font-mono" style="color: var(--text-secondary);">
+              <span>{{ processedItems }} / {{ totalItems || '…' }} records</span>
+              <span style="color: var(--accent);">{{ progress }}%</span>
             </div>
-            <div class="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+            <div class="w-full h-2.5 rounded-full overflow-hidden" style="background: var(--bg-tertiary);">
               <div
-                class="bg-gradient-to-r from-purple-600 to-indigo-600 h-3 rounded-full transition-all duration-500"
+                class="h-full rounded-full transition-all duration-500"
+                style="background: var(--accent);"
                 :style="{ width: `${progress}%` }"
               ></div>
             </div>
           </div>
 
           <!-- Status Messages -->
-          <div class="text-sm text-gray-500 space-y-2">
-            <p v-if="status === 'pending'">Starting import...</p>
-            <p v-else-if="status === 'in_progress'">
-              Fetching records from Discogs...
-            </p>
+          <div class="text-sm" style="color: var(--text-tertiary);">
+            <p v-if="status === 'pending'">Starting import…</p>
+            <p v-else-if="status === 'in_progress'">Fetching records from Discogs…</p>
           </div>
 
           <!-- Info Box -->
-          <div class="mt-8 bg-purple-50 border border-purple-200 rounded-lg p-4 text-left">
-            <p class="text-sm text-gray-700">
-              <span class="font-semibold">Why does this take time?</span><br>
-              We respect Discogs' API rate limits to ensure reliable service for everyone.
-              Your collection is being imported safely in the background.
+          <div class="mt-8 surface-2 p-4 text-left">
+            <p class="text-sm" style="color: var(--text-secondary);">
+              <span class="font-semibold" style="color: var(--text-primary);">Why does this take time?</span><br>
+              We respect Discogs' API rate limits to ensure reliable service for everyone. Your collection is imported safely in the background.
             </p>
           </div>
         </div>

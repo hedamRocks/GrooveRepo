@@ -2,6 +2,7 @@
 /**
  * Landing page - redirects based on auth state
  */
+definePageMeta({ layout: 'blank' })
 
 const { data: session, error } = await useFetch('/api/auth/me')
 
@@ -27,56 +28,27 @@ if (error.value) {
 </script>
 
 <template>
-  <div class="min-h-screen flex items-center justify-center bg-dots relative" style="background-color: var(--bg-primary);">
-    <!-- Ambient background elements -->
-    <div class="absolute inset-0 overflow-hidden">
-      <div class="absolute top-1/4 left-1/4 w-64 h-64 bg-cyan-500/10 rounded-full blur-3xl floating" style="animation-duration: 8s;"></div>
-      <div class="absolute bottom-1/4 right-1/4 w-48 h-48 bg-purple-500/10 rounded-full blur-3xl floating" style="animation-duration: 6s; animation-delay: 2s;"></div>
-      <div class="absolute top-1/2 left-1/2 w-32 h-32 bg-pink-500/10 rounded-full blur-2xl floating" style="animation-duration: 4s; animation-delay: 1s;"></div>
+  <div class="min-h-screen flex items-center justify-center bg-grain relative overflow-hidden" style="background-color: var(--bg-primary);">
+    <!-- Ambient coral glow -->
+    <div class="absolute inset-0 overflow-hidden pointer-events-none">
+      <div class="absolute top-1/3 left-1/2 -translate-x-1/2 w-[34rem] h-[34rem] rounded-full blur-[120px]" style="background: rgba(255,77,61,0.10);"></div>
     </div>
 
     <div class="relative text-center scale-in">
-      <!-- Modern Loading Spinner -->
-      <div class="relative mb-12">
-        <div class="w-24 h-24 mx-auto relative">
-          <!-- Outer ring -->
-          <div class="absolute inset-0 border-2 border-transparent border-t-cyan-400 animate-spin" style="animation-duration: 1s;"></div>
-          <!-- Middle ring -->
-          <div class="absolute inset-2 border border-transparent border-r-purple-400 animate-spin" style="animation-duration: 1.5s; animation-direction: reverse;"></div>
-          <!-- Inner ring -->
-          <div class="absolute inset-4 border border-transparent border-b-pink-400 animate-spin" style="animation-duration: 2s;"></div>
-          <!-- Center dot -->
-          <div class="absolute inset-0 flex items-center justify-center">
-            <div class="w-3 h-3 bg-cyan-400 rounded-full pulsing neon-glow"></div>
-          </div>
+      <!-- Loading mark -->
+      <div class="relative mb-10 mx-auto w-16 h-16">
+        <div class="absolute inset-0 rounded-full border-2 border-white/10"></div>
+        <div class="absolute inset-0 rounded-full border-2 border-transparent animate-spin" style="border-top-color: var(--accent); animation-duration: 0.9s;"></div>
+        <div class="absolute inset-0 flex items-center justify-center">
+          <div class="w-2.5 h-2.5 rounded-full" style="background: var(--accent);"></div>
         </div>
-        
-        <!-- Floating Elements -->
-        <div class="absolute -top-6 -left-8 w-2 h-2 bg-cyan-400 neon-glow floating opacity-80" style="animation-delay: 0s;"></div>
-        <div class="absolute -top-4 right-6 w-1.5 h-1.5 bg-purple-400 neon-glow floating opacity-60" style="animation-delay: 1s;"></div>
-        <div class="absolute -bottom-6 -right-8 w-2.5 h-2.5 bg-pink-400 neon-glow floating opacity-70" style="animation-delay: 2s;"></div>
-        <div class="absolute -bottom-4 -left-6 w-1 h-1 bg-yellow-400 neon-glow floating opacity-50" style="animation-delay: 1.5s;"></div>
       </div>
-      
-      <!-- Loading Text -->
-      <div class="space-y-6">
-        <h1 class="text-4xl font-bold gradient-text">GrooveRepo</h1>
-        <div class="space-y-2">
-          <p class="font-mono text-sm uppercase tracking-widest" style="color: var(--text-secondary);">
-            Initializing Collection
-          </p>
-          <!-- Progress bar -->
-          <div class="w-48 h-1 bg-gray-800 mx-auto overflow-hidden">
-            <div class="h-full bg-gradient-to-r from-cyan-400 via-purple-400 to-pink-400 animate-pulse" style="width: 60%;"></div>
-          </div>
-        </div>
-        
-        <!-- Progress dots -->
-        <div class="flex justify-center space-x-2">
-          <div class="w-2 h-2 bg-cyan-400 neon-glow animate-bounce" style="animation-delay: 0s;"></div>
-          <div class="w-2 h-2 bg-purple-400 neon-glow animate-bounce" style="animation-delay: 0.2s;"></div>
-          <div class="w-2 h-2 bg-pink-400 neon-glow animate-bounce" style="animation-delay: 0.4s;"></div>
-        </div>
+
+      <h1 class="display text-4xl mb-3">Groove<span style="color: var(--text-secondary);">Repo</span></h1>
+      <p class="eyebrow">Loading your collection</p>
+
+      <div class="w-44 h-1 mx-auto mt-6 rounded-full overflow-hidden" style="background: var(--bg-tertiary);">
+        <div class="h-full rounded-full animate-pulse" style="width: 60%; background: var(--accent);"></div>
       </div>
     </div>
   </div>

@@ -119,6 +119,8 @@ const isAnalyzingTracks = ref(false)
 const analyzingTrackId = ref<string | null>(null)
 const analysisJobId = ref<string | null>(null)
 const analysisProgress = ref(0)
+let analysisInterval: NodeJS.Timeout | null = null
+let analysisFailures = 0
 
 // Track editing
 const editingTrackId = ref<string | null>(null)
@@ -203,10 +205,19 @@ async function analyzeSingleTrack(trackId: string) {
   }
 }
 
+function stopAnalysisPolling() {
+  if (analysisInterval) {
+    clearInterval(analysisInterval)
+    analysisInterval = null
+  }
+}
+
 async function pollAnalysisProgress() {
   if (!analysisJobId.value) return
+  analysisFailures = 0
+  stopAnalysisPolling()
 
-  const interval = setInterval(async () => {
+  analysisInterval = setInterval(async () => {
     try {
       const status = await $fetch<{
         status: string
@@ -215,25 +226,28 @@ async function pollAnalysisProgress() {
         failed: number
         errorMessage?: string
       }>(`/api/analysis/${analysisJobId.value}`)
+      analysisFailures = 0
 
       analysisProgress.value = status.progress
 
       if (status.status === 'completed') {
-        clearInterval(interval)
+        stopAnalysisPolling()
         isAnalyzingTracks.value = false
         analyzingTrackId.value = null
         await fetchRecord() // Reload to show updated metadata
         analysisJobId.value = null
-        alert(`Analysis complete! ${status.processed} tracks analyzed, ${status.failed} failed.`)
       } else if (status.status === 'failed') {
-        clearInterval(interval)
+        stopAnalysisPolling()
         isAnalyzingTracks.value = false
         analyzingTrackId.value = null
-        alert(`Analysis failed: ${status.errorMessage}`)
         analysisJobId.value = null
       }
     } catch (error) {
-      console.error('Failed to poll analysis status:', error)
+      if (++analysisFailures >= 3) {
+        stopAnalysisPolling()
+        isAnalyzingTracks.value = false
+        analyzingTrackId.value = null
+      }
     }
   }, 3000) // Poll every 3 seconds
 }
@@ -242,334 +256,267 @@ onMounted(() => {
   fetchRecord()
   fetchShelves()
 })
+
+onUnmounted(stopAnalysisPolling)
 </script>
 
 <template>
-  <div class="min-h-screen bg-white">
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 pb-20">
     <!-- Loading State -->
-    <div v-if="isLoadingRecord" class="flex items-center justify-center min-h-screen morphing-bg">
+    <div v-if="isLoadingRecord" class="flex items-center justify-center min-h-[70vh]">
       <div class="text-center">
-        <div class="relative mb-6">
-          <div class="w-16 h-16 mx-auto">
-            <div class="absolute inset-0 border-2 border-white/20"></div>
-            <div class="absolute inset-0 border-2 border-transparent border-t-white animate-spin"></div>
-          </div>
+        <div class="w-14 h-14 mx-auto relative mb-5">
+          <div class="absolute inset-0 rounded-full border-2 border-white/10"></div>
+          <div class="absolute inset-0 rounded-full border-2 border-transparent animate-spin" style="border-top-color: var(--accent);"></div>
         </div>
-        <p class="text-white font-mono text-sm">Loading record...</p>
+        <p class="font-mono text-sm" style="color: var(--text-secondary);">Loading record…</p>
       </div>
     </div>
 
     <!-- Record Detail -->
-    <div v-else-if="record" class="max-w-7xl mx-auto px-6 lg:px-8 py-8 animate-fade-in">
+    <div v-else-if="record" class="py-8 fade-in">
       <!-- Back Button -->
-      <button
-        @click="router.back()"
-        class="flex items-center text-gray-500 hover:text-gray-900 mb-8 transition-all duration-300 hover-lift group"
-      >
-        <div class="w-8 h-8 flex items-center justify-center border border-gray-200 group-hover:border-gray-400 mr-3 transition-colors">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"></path>
-          </svg>
-        </div>
-        <span class="font-medium">Back to collection</span>
+      <button @click="router.back()" class="btn-ghost mb-6 -ml-2">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"></path>
+        </svg>
+        Back to collection
       </button>
 
-      <div class="bg-white shadow-organic overflow-hidden border border-gray-100">
-        <div class="lg:flex">
-          <!-- Cover Art -->
-          <div class="lg:w-1/2 xl:w-2/5">
-            <div class="aspect-square bg-gradient-to-br from-gray-100 to-gray-200 relative group">
-              <img
-                v-if="record.release.coverUrl"
-                :src="record.release.coverUrl"
-                :alt="record.release.title"
-                class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-              />
-              <div v-else class="w-full h-full flex items-center justify-center bg-gradient-to-br from-purple-50 to-indigo-50">
-                <svg class="w-32 h-32 text-purple-300 floating" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
-                </svg>
+      <div class="grid lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-6 lg:gap-10">
+        <!-- Cover Art -->
+        <div class="lg:sticky lg:top-24 self-start">
+          <div class="aspect-square rounded-2xl overflow-hidden relative group" style="background: var(--bg-tertiary); border: 1px solid var(--border-subtle);">
+            <img
+              v-if="record.release.coverUrl"
+              :src="record.release.coverUrl"
+              :alt="record.release.title"
+              class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+            />
+            <div v-else class="w-full h-full flex items-center justify-center">
+              <svg class="w-28 h-28" style="color: var(--text-tertiary);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
+              </svg>
+            </div>
+          </div>
+
+          <!-- Community + Discogs link under cover -->
+          <div class="flex items-center gap-3 mt-4">
+            <div v-if="record.release.communityHave" class="surface-2 px-3 py-2 flex-1">
+              <p class="text-[10px] uppercase tracking-wider" style="color: var(--text-tertiary);">Have</p>
+              <p class="font-semibold font-mono text-sm" style="color: var(--text-primary);">{{ record.release.communityHave.toLocaleString() }}</p>
+            </div>
+            <div v-if="record.release.communityWant" class="surface-2 px-3 py-2 flex-1">
+              <p class="text-[10px] uppercase tracking-wider" style="color: var(--text-tertiary);">Want</p>
+              <p class="font-semibold font-mono text-sm" style="color: var(--text-primary);">{{ record.release.communityWant.toLocaleString() }}</p>
+            </div>
+          </div>
+          <a
+            v-if="record.release.discogsId"
+            :href="`https://www.discogs.com/release/${record.release.discogsId}`"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="btn-secondary w-full mt-3 text-sm"
+          >
+            View on Discogs
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+            </svg>
+          </a>
+        </div>
+
+        <!-- Metadata & Notes -->
+        <div class="min-w-0">
+          <!-- Title & Artist -->
+          <div class="mb-8 slide-up">
+            <p class="eyebrow mb-3">Record details</p>
+            <h1 class="display text-3xl lg:text-5xl mb-3">
+              {{ record.release.title }}
+            </h1>
+            <p class="text-lg lg:text-xl" style="color: var(--text-secondary);">
+              {{ record.release.artist || 'Unknown Artist' }}
+            </p>
+          </div>
+
+          <!-- Metadata Grid -->
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-5 mb-8 pb-8" style="border-bottom: 1px solid var(--border-subtle);">
+            <div v-if="record.release.label">
+              <p class="text-[10px] font-mono uppercase tracking-wider mb-1" style="color: var(--text-tertiary);">Label</p>
+              <p class="font-medium text-sm" style="color: var(--text-primary);">{{ record.release.label }}</p>
+            </div>
+            <div v-if="record.release.catNo">
+              <p class="text-[10px] font-mono uppercase tracking-wider mb-1" style="color: var(--text-tertiary);">Catalog #</p>
+              <p class="font-medium text-sm" style="color: var(--text-primary);">{{ record.release.catNo }}</p>
+            </div>
+            <div v-if="record.release.year">
+              <p class="text-[10px] font-mono uppercase tracking-wider mb-1" style="color: var(--text-tertiary);">Year</p>
+              <p class="font-medium text-sm" style="color: var(--text-primary);">{{ record.release.year }}</p>
+            </div>
+            <div v-if="record.release.country">
+              <p class="text-[10px] font-mono uppercase tracking-wider mb-1" style="color: var(--text-tertiary);">Country</p>
+              <p class="font-medium text-sm" style="color: var(--text-primary);">{{ record.release.country }}</p>
+            </div>
+            <div v-if="record.release.formats?.length">
+              <p class="text-[10px] font-mono uppercase tracking-wider mb-1" style="color: var(--text-tertiary);">Format</p>
+              <p class="font-medium text-sm" style="color: var(--text-primary);">{{ record.release.formats.join(', ') }}</p>
+            </div>
+            <div v-if="record.release.genres?.length">
+              <p class="text-[10px] font-mono uppercase tracking-wider mb-1" style="color: var(--text-tertiary);">Genres</p>
+              <p class="font-medium text-sm" style="color: var(--text-primary);">{{ record.release.genres.join(', ') }}</p>
+            </div>
+            <div v-if="record.release.styles?.length" class="col-span-2 sm:col-span-3">
+              <p class="text-[10px] font-mono uppercase tracking-wider mb-2" style="color: var(--text-tertiary);">Styles</p>
+              <div class="flex flex-wrap gap-2">
+                <span v-for="style in record.release.styles" :key="style" class="chip">{{ style }}</span>
               </div>
-              <!-- Overlay with play button -->
-              <div class="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
-                <div class="w-16 h-16 bg-white/20 backdrop-blur-sm flex items-center justify-center border border-white/30">
-                  <svg class="w-8 h-8 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M8 5v14l11-7z"/>
-                  </svg>
+            </div>
+          </div>
+
+          <!-- Condition Tracking -->
+          <div class="mb-8 pb-8" style="border-bottom: 1px solid var(--border-subtle);">
+            <p class="eyebrow mb-4">Condition</p>
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm mb-2" style="color: var(--text-secondary);">Media</label>
+                <select v-model="mediaCondition" class="input w-full px-3 py-2.5 text-sm">
+                  <option value="">Not graded</option>
+                  <option v-for="option in conditionOptions" :key="option" :value="option">{{ option }}</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm mb-2" style="color: var(--text-secondary);">Sleeve</label>
+                <select v-model="sleeveCondition" class="input w-full px-3 py-2.5 text-sm">
+                  <option value="">Not graded</option>
+                  <option v-for="option in conditionOptions" :key="option" :value="option">{{ option }}</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tracklist -->
+          <div v-if="record.tracks?.length" class="mb-8 pb-8" style="border-bottom: 1px solid var(--border-subtle);">
+            <div class="flex items-center justify-between mb-4">
+              <p class="eyebrow">Tracklist</p>
+              <button
+                @click="analyzeAllTracks"
+                :disabled="isAnalyzingTracks"
+                class="text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                style="color: var(--accent);"
+              >
+                {{ isAnalyzingTracks ? `Analyzing… ${analysisProgress}%` : 'Analyze all tracks' }}
+              </button>
+            </div>
+            <div class="surface divide-y" style="--tw-divide-opacity: 1;">
+              <div
+                v-for="track in record.tracks"
+                :key="track.id"
+                class="flex items-center gap-3 px-4 py-2.5 transition-colors group hover:bg-white/[0.03]"
+                style="border-top: 1px solid var(--border-subtle);"
+              >
+                <span class="font-mono text-xs w-8 flex-shrink-0 font-semibold" style="color: var(--text-tertiary);">
+                  {{ track.position }}
+                </span>
+
+                <div class="flex-1 min-w-0">
+                  <p class="text-sm truncate font-medium" style="color: var(--text-primary);">{{ track.title }}</p>
+                  <p v-if="track.duration" class="text-xs font-mono" style="color: var(--text-tertiary);">{{ track.duration }}</p>
+                </div>
+
+                <!-- DJ Metadata -->
+                <div class="flex items-center gap-1.5">
+                  <div v-if="track.bpm" class="inline-flex items-center gap-1">
+                    <div v-if="editingTrackId === track.id" class="flex items-center gap-1">
+                      <input
+                        v-model.number="editingBpm"
+                        type="number"
+                        min="20"
+                        max="300"
+                        class="input w-16 px-2 py-1 text-xs font-mono"
+                        @keyup.enter="saveTrackBpm(track.id)"
+                        @keyup.esc="cancelEditBpm"
+                      />
+                      <button @click="saveTrackBpm(track.id)" class="px-2 py-1 text-xs rounded-md text-white" style="background: var(--accent);">✓</button>
+                      <button @click="cancelEditBpm" class="px-2 py-1 text-xs rounded-md surface-2" style="color: var(--text-secondary);">✕</button>
+                    </div>
+                    <span
+                      v-else
+                      @click="startEditBpm(track)"
+                      class="chip font-mono cursor-pointer hover:border-[var(--accent)] !text-[11px]"
+                      title="Click to edit BPM"
+                    >
+                      {{ track.bpm }} BPM
+                    </span>
+                  </div>
+                  <span v-if="track.key" class="chip font-mono !text-[11px]">{{ track.key }}</span>
+                  <span v-if="track.energy" class="chip font-mono !text-[11px]">E{{ track.energy }}</span>
+                  <button
+                    v-if="!track.bpm"
+                    @click="analyzeSingleTrack(track.id)"
+                    :disabled="analyzingTrackId === track.id"
+                    class="opacity-0 group-hover:opacity-100 text-xs font-medium transition-opacity disabled:opacity-50"
+                    style="color: var(--accent);"
+                  >
+                    {{ analyzingTrackId === track.id ? 'Analyzing…' : 'Analyze' }}
+                  </button>
                 </div>
               </div>
             </div>
           </div>
 
-          <!-- Metadata & Notes -->
-          <div class="lg:w-1/2 xl:w-3/5 p-8 lg:p-12">
-            <!-- Title & Artist -->
-            <div class="mb-8 animate-slide-up">
-              <h1 class="text-4xl lg:text-5xl font-bold gradient-text mb-3 leading-tight">
-                {{ record.release.title }}
-              </h1>
-              <p class="text-xl lg:text-2xl text-gray-600 font-medium">
-                {{ record.release.artist || 'Unknown Artist' }}
-              </p>
-              <div class="flex items-center gap-3 mt-4">
-                <div class="h-0.5 w-12 bg-organic"></div>
-                <span class="text-sm font-mono text-gray-500">RECORD DETAILS</span>
-              </div>
-            </div>
-
-            <!-- Metadata Grid -->
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8 pb-8 border-b border-gray-100 animate-slide-up" style="animation-delay: 0.1s;">
-              <div v-if="record.release.label" class="group">
-                <p class="text-xs font-mono text-gray-400 uppercase tracking-wider mb-1">Label</p>
-                <p class="font-semibold text-gray-900 group-hover:text-purple-600 transition-colors">{{ record.release.label }}</p>
-              </div>
-              <div v-if="record.release.catNo" class="group">
-                <p class="text-xs font-mono text-gray-400 uppercase tracking-wider mb-1">Catalog #</p>
-                <p class="font-semibold text-gray-900 group-hover:text-purple-600 transition-colors">{{ record.release.catNo }}</p>
-              </div>
-              <div v-if="record.release.year" class="group">
-                <p class="text-xs font-mono text-gray-400 uppercase tracking-wider mb-1">Year</p>
-                <p class="font-semibold text-gray-900 group-hover:text-purple-600 transition-colors">{{ record.release.year }}</p>
-              </div>
-              <div v-if="record.release.country" class="group">
-                <p class="text-xs font-mono text-gray-400 uppercase tracking-wider mb-1">Country</p>
-                <p class="font-semibold text-gray-900 group-hover:text-purple-600 transition-colors">{{ record.release.country }}</p>
-              </div>
-              <div v-if="record.release.formats?.length" class="group">
-                <p class="text-xs font-mono text-gray-400 uppercase tracking-wider mb-1">Format</p>
-                <p class="font-semibold text-gray-900 group-hover:text-purple-600 transition-colors">{{ record.release.formats.join(', ') }}</p>
-              </div>
-              <div v-if="record.release.genres?.length" class="group">
-                <p class="text-xs font-mono text-gray-400 uppercase tracking-wider mb-1">Genres</p>
-                <p class="font-semibold text-gray-900 group-hover:text-purple-600 transition-colors">{{ record.release.genres.join(', ') }}</p>
-              </div>
-              <div v-if="record.release.styles?.length" class="group sm:col-span-2">
-                <p class="text-xs font-mono text-gray-400 uppercase tracking-wider mb-1">Styles</p>
-                <div class="flex flex-wrap gap-2">
-                  <span 
-                    v-for="style in record.release.styles" 
-                    :key="style"
-                    class="px-3 py-1 bg-gray-100 hover:bg-purple-100 text-sm font-medium text-gray-700 hover:text-purple-700 transition-colors border border-gray-200 hover:border-purple-200"
-                  >
-                    {{ style }}
-                  </span>
-                </div>
-              </div>
-              <div v-if="record.release.communityHave" class="group">
-                <p class="text-xs font-mono text-gray-400 uppercase tracking-wider mb-1">Community Have</p>
-                <p class="font-semibold text-gray-900 group-hover:text-emerald-600 transition-colors">{{ record.release.communityHave.toLocaleString() }}</p>
-              </div>
-              <div v-if="record.release.communityWant">
-                <p class="text-sm text-gray-500">Want</p>
-                <p class="font-medium text-gray-900">{{ record.release.communityWant.toLocaleString() }}</p>
-              </div>
-            </div>
-
-            <!-- Condition Tracking -->
-            <div class="mb-8 pb-8 border-b border-gray-200">
-              <h3 class="text-sm font-semibold text-gray-700 mb-3">Condition</h3>
-              <div class="grid grid-cols-2 gap-4">
-                <div>
-                  <label class="block text-sm text-gray-600 mb-2">Media Condition</label>
-                  <select
-                    v-model="mediaCondition"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none text-sm"
-                  >
-                    <option value="">Not graded</option>
-                    <option v-for="option in conditionOptions" :key="option" :value="option">
-                      {{ option }}
-                    </option>
-                  </select>
-                </div>
-                <div>
-                  <label class="block text-sm text-gray-600 mb-2">Sleeve Condition</label>
-                  <select
-                    v-model="sleeveCondition"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none text-sm"
-                  >
-                    <option value="">Not graded</option>
-                    <option v-for="option in conditionOptions" :key="option" :value="option">
-                      {{ option }}
-                    </option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            <!-- Tracklist -->
-            <div v-if="record.tracks?.length" class="mb-8 pb-8 border-b border-gray-200 animate-slide-up" style="animation-delay: 0.2s;">
-              <div class="flex items-center justify-between mb-4">
-                <h3 class="text-sm font-semibold text-gray-700">Tracklist</h3>
-                <button
-                  @click="analyzeAllTracks"
-                  :disabled="isAnalyzingTracks"
-                  class="text-xs text-purple-600 hover:text-purple-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {{ isAnalyzingTracks ? `Analyzing... ${analysisProgress}%` : 'Analyze All Tracks' }}
-                </button>
-              </div>
-              <div class="space-y-1">
-                <div
-                  v-for="track in record.tracks"
-                  :key="track.id"
-                  class="flex items-center gap-3 px-3 py-2 hover:bg-gray-50 rounded-lg transition-colors group"
-                >
-                  <!-- Position -->
-                  <span class="text-gray-500 font-mono text-xs w-8 flex-shrink-0 font-semibold">
-                    {{ track.position }}
-                  </span>
-
-                  <!-- Title & Duration -->
-                  <div class="flex-1 min-w-0">
-                    <p class="text-sm text-gray-900 truncate font-medium">{{ track.title }}</p>
-                    <p v-if="track.duration" class="text-xs text-gray-500">{{ track.duration }}</p>
-                  </div>
-
-                  <!-- DJ Metadata -->
-                  <div class="flex items-center gap-2">
-                    <!-- BPM - editable -->
-                    <div v-if="track.bpm" class="inline-flex items-center gap-1">
-                      <div v-if="editingTrackId === track.id" class="flex items-center gap-1">
-                        <input
-                          v-model.number="editingBpm"
-                          type="number"
-                          min="20"
-                          max="300"
-                          class="w-16 px-2 py-1 text-xs font-mono border border-purple-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
-                          @keyup.enter="saveTrackBpm(track.id)"
-                          @keyup.esc="cancelEditBpm"
-                        />
-                        <button
-                          @click="saveTrackBpm(track.id)"
-                          class="px-2 py-1 text-xs bg-purple-600 text-white rounded hover:bg-purple-700"
-                        >
-                          ✓
-                        </button>
-                        <button
-                          @click="cancelEditBpm"
-                          class="px-2 py-1 text-xs bg-gray-300 text-gray-700 rounded hover:bg-gray-400"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                      <span
-                        v-else
-                        @click="startEditBpm(track)"
-                        class="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-mono bg-purple-100 text-purple-700 border border-purple-200 cursor-pointer hover:bg-purple-200 transition-colors"
-                        title="Click to edit BPM"
-                      >
-                        <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
-                          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-                        </svg>
-                        {{ track.bpm }}
-                      </span>
-                    </div>
-                    <span v-if="track.key" class="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-mono bg-cyan-100 text-cyan-700 border border-cyan-200">
-                      <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
-                      </svg>
-                      {{ track.key }}
-                    </span>
-                    <span v-if="track.energy" class="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-mono bg-pink-100 text-pink-700 border border-pink-200">
-                      <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M13 2.05v3.03c3.39.49 6 3.39 6 6.92 0 .9-.18 1.75-.48 2.54l2.6 1.53c.56-1.24.88-2.62.88-4.07 0-5.18-3.95-9.45-9-9.95zM12 19c-3.87 0-7-3.13-7-7 0-3.53 2.61-6.43 6-6.92V2.05c-5.06.5-9 4.76-9 9.95 0 5.52 4.47 10 9.99 10 3.31 0 6.24-1.61 8.06-4.09l-2.6-1.53C16.17 17.98 14.21 19 12 19z"/>
-                      </svg>
-                      {{ track.energy }}/10
-                    </span>
-                    <button
-                      v-if="!track.bpm"
-                      @click="analyzeSingleTrack(track.id)"
-                      :disabled="analyzingTrackId === track.id"
-                      class="opacity-0 group-hover:opacity-100 text-xs text-purple-600 hover:text-purple-700 font-medium transition-opacity disabled:opacity-50"
-                    >
-                      {{ analyzingTrackId === track.id ? 'Analyzing...' : 'Analyze' }}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Shelves -->
-            <div class="mb-8">
-              <h3 class="text-sm font-semibold text-gray-700 mb-3">On Shelves</h3>
-              <div v-if="record.shelfPlacements.length > 0" class="flex flex-wrap gap-2 mb-3">
-                <div
-                  v-for="placement in record.shelfPlacements"
-                  :key="placement.id"
-                  class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm"
-                  :style="{ backgroundColor: placement.shelf.color || '#e5e7eb' }"
-                >
-                  <span>{{ placement.shelf.name }}</span>
-                  <button
-                    @click="removeFromShelf(placement.shelf.id)"
-                    class="hover:opacity-70"
-                  >
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                    </svg>
-                  </button>
-                </div>
-              </div>
-
-              <!-- Add to Shelf -->
-              <div class="flex gap-2">
-                <select
-                  v-model="selectedShelfId"
-                  class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none text-sm"
-                >
-                  <option value="">Add to shelf...</option>
-                  <option
-                    v-for="shelf in shelves"
-                    :key="shelf.id"
-                    :value="shelf.id"
-                  >
-                    {{ shelf.name }}
-                  </option>
-                </select>
-                <button
-                  @click="addToShelf"
-                  :disabled="!selectedShelfId || isAddingToShelf"
-                  class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition text-sm font-medium"
-                >
-                  Add
-                </button>
-              </div>
-            </div>
-
-            <!-- Notes -->
-            <div>
-              <h3 class="text-sm font-semibold text-gray-700 mb-3">Personal Notes</h3>
-              <textarea
-                v-model="notes"
-                placeholder="Add your thoughts, memories, or listening notes..."
-                rows="6"
-                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none resize-none"
-              ></textarea>
-              <div class="flex items-center justify-between mt-3">
-                <span v-if="saveMessage" class="text-sm text-green-600">{{ saveMessage }}</span>
-                <button
-                  @click="saveNotes"
-                  :disabled="isSavingNotes"
-                  class="ml-auto px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 transition font-medium"
-                >
-                  {{ isSavingNotes ? 'Saving...' : 'Save Notes' }}
-                </button>
-              </div>
-            </div>
-
-            <!-- Discogs Link -->
-            <div v-if="record.release.discogsId" class="mt-6 pt-6 border-t border-gray-200">
-              <a
-                :href="`https://www.discogs.com/release/${record.release.discogsId}`"
-                target="_blank"
-                rel="noopener noreferrer"
-                class="text-sm text-purple-600 hover:text-purple-700 flex items-center"
+          <!-- Shelves -->
+          <div class="mb-8 pb-8" style="border-bottom: 1px solid var(--border-subtle);">
+            <p class="eyebrow mb-4">On shelves</p>
+            <div v-if="record.shelfPlacements.length > 0" class="flex flex-wrap gap-2 mb-3">
+              <div
+                v-for="placement in record.shelfPlacements"
+                :key="placement.id"
+                class="inline-flex items-center gap-2 pl-2.5 pr-2 py-1.5 rounded-full text-sm font-medium"
+                style="border: 1px solid var(--border-subtle); background: var(--bg-tertiary);"
               >
-                View on Discogs
-                <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
-                </svg>
-              </a>
+                <span class="w-2.5 h-2.5 rounded-full" :style="{ backgroundColor: placement.shelf.color || '#ff4d3d' }"></span>
+                <span style="color: var(--text-primary);">{{ placement.shelf.name }}</span>
+                <button @click="removeFromShelf(placement.shelf.id)" class="hover:opacity-70" style="color: var(--text-tertiary);">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"></path>
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <!-- Add to Shelf -->
+            <div class="flex gap-2">
+              <select v-model="selectedShelfId" class="input flex-1 px-3 py-2.5 text-sm">
+                <option value="">Add to shelf…</option>
+                <option v-for="shelf in shelves" :key="shelf.id" :value="shelf.id">{{ shelf.name }}</option>
+              </select>
+              <button
+                @click="addToShelf"
+                :disabled="!selectedShelfId || isAddingToShelf"
+                class="btn-primary !py-2.5 !px-5 text-sm"
+              >
+                Add
+              </button>
+            </div>
+          </div>
+
+          <!-- Notes -->
+          <div>
+            <p class="eyebrow mb-4">Personal notes</p>
+            <textarea
+              v-model="notes"
+              placeholder="Add your thoughts, memories, or listening notes…"
+              rows="5"
+              class="input w-full px-4 py-3 resize-none text-sm"
+            ></textarea>
+            <div class="flex items-center justify-between mt-3">
+              <span v-if="saveMessage" class="text-sm" :style="{ color: saveMessage.includes('Failed') ? '#ff6b6b' : 'var(--accent)' }">{{ saveMessage }}</span>
+              <button
+                @click="saveNotes"
+                :disabled="isSavingNotes"
+                class="btn-primary ml-auto !py-2.5 !px-6 text-sm"
+              >
+                {{ isSavingNotes ? 'Saving…' : 'Save notes' }}
+              </button>
             </div>
           </div>
         </div>

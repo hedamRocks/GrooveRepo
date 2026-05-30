@@ -1,4 +1,5 @@
 import { getDiscogsClient } from '~/server/utils/discogs-client'
+import { syncTracksForUserRecord } from '~/server/utils/track-sync'
 
 /**
  * Manually add a record via Discogs release ID
@@ -157,6 +158,13 @@ export default defineEventHandler(async (event) => {
         }
       })
 
+      // Ensure tracks exist (record may have been added before but never opened)
+      try {
+        await syncTracksForUserRecord(existingUserRecord.id)
+      } catch (err) {
+        console.error('[Record Create] Track sync failed:', err)
+      }
+
       // Return the existing record with updated release data
       const updatedRecord = await prisma.userRecord.findUnique({
         where: { id: existingUserRecord.id },
@@ -188,6 +196,14 @@ export default defineEventHandler(async (event) => {
         }
       }
     })
+
+    // Sync tracks immediately so they're usable right away (e.g. adding from
+    // Discogs inside a setlist), instead of only after opening the detail page.
+    try {
+      await syncTracksForUserRecord(userRecord.id)
+    } catch (err) {
+      console.error('[Record Create] Track sync failed:', err)
+    }
 
     return { record: userRecord, updated: false }
 

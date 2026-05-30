@@ -248,10 +248,10 @@ const data = await client.get('/users/{username}/collection/folders/0/releases')
 - No "remember me" functionality yet
 - Users must re-authenticate if cookie expires
 
-### No Components Directory
-- All UI currently inline in page files
-- Leads to some code duplication
-- Refactoring planned for better reusability
+### Minimal Components Directory
+- Shared navigation now lives in `components/AppNav.vue` + `layouts/default.vue` (since the 2026-05-30 facelift)
+- Most page-specific UI is still inline in page files, leading to some duplication
+- Further component extraction (record card, modal shell, chip group) still planned
 
 ## Changelog
 
@@ -301,6 +301,27 @@ const data = await client.get('/users/{username}/collection/folders/0/releases')
   - `community` data (have/want counts) in basic_information
 - ✅ Import worker now updates UserRecord condition data on sync
 - ✅ Record detail page displays community have/want counts
+
+### 2026-05-30
+- ✅ **Tracklib-inspired facelift** — full visual redesign across every page, layout, and component
+  - New design system: near-black surfaces (`#0b0b0c` / `#161618`), single electric-coral accent (`#ff4d3d`), rounded corners (8–24px), soft elevation shadows
+  - Replaced neon-glassmorphism (cyan/magenta glow, blur, `border-radius: 0 !important`) with clean elevated surfaces
+  - **Display typography**: added Space Grotesk for headings; `.display` and `.eyebrow` (uppercase tracked label) helpers
+  - Shared design tokens redefined in `assets/css/main.css`: `.glass`/`.surface`/`.surface-2`, `.btn-primary` (coral pill) / `.btn-secondary` / `.btn-ghost`, `.chip`/`.chip-active`, `.input`, `.skeleton`
+  - **New shared navigation** — introduced `app.vue` (`<NuxtLayout>` wrapper), `layouts/default.vue` (+ `AppNav`), `layouts/blank.vue` (auth/onboarding), and `components/AppNav.vue` (top nav with logo, links, Add CTA, logout, mobile menu)
+  - Removed the duplicated per-page sticky bottom nav + floating action buttons (collection, shelves, stats, setlists) in favor of the shared nav
+  - All modals moved to `<Teleport to="body">` and restyled; shelf/tag/setlist color pickers default to the coral palette
+  - `tailwind.config.ts`: added `ink`/`accent` color scales + `font-display`; legacy `neon` keys remapped to the coral family so any stray usages stay on-brand
+- ✅ **Post-facelift audit fixes** (perf / flow / UX)
+  - **Auth**: added `middleware/auth.global.ts` (guards all non-public routes) + `plugins/auth-redirect.client.ts` (401 → login interceptor). Previously authed pages were reachable logged-out and failed silently.
+  - **Polling**: the analysis pollers in `collection/index.vue`, `collection/[id].vue`, `shelves/[id].vue` now store the interval, `clearInterval` on `onUnmounted`, and stop after 3 consecutive failures (were leaking + polling forever).
+  - **Error states**: `stats.vue` and `collection/index.vue` now render a retry-able error state instead of a blank page / fake "empty collection"; stats bars guard divide-by-zero.
+  - **a11y**: `:focus-visible` rings, `aria-label`s on icon buttons, `prefers-reduced-motion`, dark `<select>` option backgrounds, bumped muted-text contrast; replaced inline `onmouseover` hacks with `.icon-btn`/`.icon-danger` CSS.
+  - **DB indexes** (`prisma/schema.prisma`): added `Release.year/country/label`, GIN on `Release.genres/styles`, and composite `UserRecord[userId, addedAt]`. ⚠️ Run `npx prisma db push` to apply.
+  - **Filters**: new `GET /api/records/filter-options` computes facets across the whole collection (Country facet was always empty before); list `select` now includes `country` + `formats`.
+  - **Email + password auth** (replaces magic-link as the primary sign-in): added `User.passwordHash` (scrypt `salt:hash`, hashed via `server/utils/password.ts` using Node `crypto` — no dependency), `POST /api/auth/login`, and a password form on `pages/auth/login.vue`. Sets the same cookie session as before. The magic-link endpoints/`verify.vue` remain but are unused. New users need a `passwordHash` seeded (single-user app for now). `.env` added with the live Neon `DATABASE_URL` (fixes a missing-env login crash); `sendMagicLink` now logs the link to the console when no `RESEND_API_KEY` is set.
+  - **Tracklists via a separate resumable backfill** (replaces the inline-during-import approach): the import stays fast (`basic_information` only; it also no longer overwrites a full `discogsData` with sparse basic info on re-sync). Full tracklists are fetched by `server/utils/tracklist-backfill.ts` — a background, rate-limited, **resumable** pass (queries records still missing a tracklist each run; idempotent fetches, so stop/restart resumes). New `TracklistJob` model tracks progress. Endpoints: `POST /api/import/backfill-tracklists` (start) + `GET` (status: `{ missing, job }`). Progress is shared app-wide via `composables/useTracklistBackfill.ts` (single `useState` + one global 2s poller): the collection page shows a full banner (percentage, bar, "X of Y · N failed"), and `AppNav` shows a compact "NN% tracklists" pill on every page while it runs. `records/create.post.ts` still syncs tracks inline on single Discogs adds. Collection toolbar "Sync" button re-runs the (fast) import.
+  - **Stats moved to DB aggregation** (`server/api/stats/index.get.ts`): replaced "load whole collection → tally in JS" with parallel Postgres `GROUP BY` queries (+ `unnest(genres)` for the array facet, `FLOOR(year/10)*10` for decades). Three cheap counts stay as indexed Prisma calls. Response shape unchanged; validated against live data (375-record collection). Indexes applied to the live Neon DB (project `groove repo`).
 
 ---
 

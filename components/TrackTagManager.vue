@@ -1,139 +1,101 @@
 <template>
   <div>
     <!-- Current Tags -->
-    <div v-if="trackTags.length > 0" class="flex flex-wrap gap-1 mb-2">
+    <div v-if="trackTags.length > 0" class="flex flex-wrap gap-1.5 mb-2">
       <span
         v-for="trackTag in trackTags"
         :key="trackTag.id"
-        class="inline-flex items-center px-2 py-1 text-xs font-medium text-white rounded group"
-        :style="{ backgroundColor: trackTag.tag.color || '#6B7280' }"
+        class="inline-flex items-center gap-1 pl-2.5 pr-1.5 py-1 text-xs font-medium rounded-full group"
+        style="border: 1px solid var(--border-subtle); background: var(--bg-tertiary); color: var(--text-primary);"
       >
+        <span class="w-2 h-2 rounded-full" :style="{ backgroundColor: trackTag.tag.color || '#ff4d3d' }"></span>
         {{ trackTag.tag.name }}
-        <button
-          @click.stop="removeTag(trackTag.id)"
-          class="ml-1 hover:text-red-200 transition-colors"
-          title="Remove tag"
-        >
-          <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        <button @click.stop="removeTag(trackTag.id)" class="transition-colors" style="color: var(--text-tertiary);" title="Remove tag">
+          <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
       </span>
     </div>
 
     <!-- Add Tag Button -->
-    <button
-      @click="showTagSelector = true"
-      class="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
-    >
-      + Add Tag
+    <button @click="showTagSelector = true" class="text-xs font-medium transition-colors" style="color: var(--accent);">
+      + Add tag
     </button>
 
     <!-- Tag Modal -->
-    <div
-      v-if="showTagSelector"
-      class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
-      @click="closeModal"
-    >
-      <div
-        class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full"
-        @click.stop
-      >
-        <div class="p-6">
+    <Teleport to="body">
+      <div v-if="showTagSelector" class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[60] p-4" @click="closeModal">
+        <div class="surface max-w-md w-full p-6 scale-in" style="box-shadow: var(--shadow-lg);" @click.stop>
           <!-- Header -->
-          <div class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Manage Tags</h3>
-            <button
-              @click="closeModal"
-              class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-            >
-              <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          <div class="flex items-center justify-between mb-5">
+            <h3 class="display text-xl">Manage tags</h3>
+            <button @click="closeModal" class="w-9 h-9 flex items-center justify-center rounded-full hover:bg-white/[0.06]" style="color: var(--text-secondary);">
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
           </div>
 
           <!-- Create New Tag Form -->
-          <div class="mb-4 pb-4 border-b border-gray-200 dark:border-gray-600">
-            <div class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Create new tag:</div>
-            <div class="flex space-x-2">
+          <div class="mb-5 pb-5" style="border-bottom: 1px solid var(--border-subtle);">
+            <p class="eyebrow mb-3">Create new tag</p>
+            <div class="flex gap-2">
               <input
                 v-model="newTagName"
                 type="text"
                 placeholder="Tag name"
-                class="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                class="input flex-1 px-3 py-2 text-sm"
                 @keydown.enter="createAndAddTag"
               />
-              <input
-                v-model="newTagColor"
-                type="color"
-                class="w-12 h-10 rounded-lg border border-gray-300 dark:border-gray-600 cursor-pointer"
-                title="Tag color"
-              />
-              <button
-                @click="createAndAddTag"
-                :disabled="!newTagName.trim() || isCreatingTag"
-                class="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                {{ isCreatingTag ? '...' : 'Add' }}
+              <input v-model="newTagColor" type="color" class="w-11 h-10 rounded-lg cursor-pointer bg-transparent" style="border: 1px solid var(--border-subtle);" title="Tag color" />
+              <button @click="createAndAddTag" :disabled="!newTagName.trim() || isCreatingTag" class="btn-primary !py-2 !px-4 text-sm">
+                {{ isCreatingTag ? '…' : 'Add' }}
               </button>
             </div>
           </div>
 
           <!-- Existing Tags -->
           <div>
-            <div class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Or select existing tags:</div>
+            <p class="eyebrow mb-3">Or select existing</p>
 
             <div v-if="isLoadingTags" class="text-center py-8">
-              <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+              <div class="w-8 h-8 border-2 rounded-full animate-spin mx-auto" style="border-color: var(--accent); border-top-color: transparent;"></div>
             </div>
 
-            <div v-else-if="availableTags.length === 0" class="text-sm text-gray-500 dark:text-gray-400 py-8 text-center">
+            <div v-else-if="availableTags.length === 0" class="text-sm py-8 text-center" style="color: var(--text-tertiary);">
               No existing tags available.
             </div>
 
-            <div v-else class="space-y-2 max-h-64 overflow-y-auto mb-4">
+            <div v-else class="space-y-1.5 max-h-64 overflow-y-auto mb-4">
               <button
                 v-for="tag in availableTags"
                 :key="tag.id"
                 @click="toggleTagSelection(tag.id)"
-                class="w-full flex items-center space-x-3 px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-left"
-                :class="{ 'bg-blue-50 dark:bg-blue-900/20 ring-2 ring-blue-500': selectedTagIds.includes(tag.id) }"
+                class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors text-left"
+                :class="selectedTagIds.includes(tag.id) ? 'bg-[var(--accent-soft)] ring-1 ring-[var(--accent)]' : 'hover:bg-white/[0.04]'"
               >
-                <div
-                  class="w-5 h-5 rounded flex-shrink-0"
-                  :style="{ backgroundColor: tag.color || '#6B7280' }"
-                ></div>
-                <span class="text-sm text-gray-900 dark:text-white flex-1">{{ tag.name }}</span>
-                <svg v-if="selectedTagIds.includes(tag.id)" class="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                <span class="w-4 h-4 rounded-md flex-shrink-0" :style="{ backgroundColor: tag.color || '#ff4d3d' }"></span>
+                <span class="text-sm flex-1" style="color: var(--text-primary);">{{ tag.name }}</span>
+                <svg v-if="selectedTagIds.includes(tag.id)" class="w-5 h-5" style="color: var(--accent);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
                 </svg>
               </button>
             </div>
 
             <!-- Add Selected Button -->
-            <button
-              v-if="selectedTagIds.length > 0"
-              @click="addSelectedTags"
-              :disabled="isAddingTags"
-              class="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {{ isAddingTags ? 'Adding...' : `Add ${selectedTagIds.length} selected ${selectedTagIds.length === 1 ? 'tag' : 'tags'}` }}
+            <button v-if="selectedTagIds.length > 0" @click="addSelectedTags" :disabled="isAddingTags" class="btn-primary w-full">
+              {{ isAddingTags ? 'Adding…' : `Add ${selectedTagIds.length} selected ${selectedTagIds.length === 1 ? 'tag' : 'tags'}` }}
             </button>
           </div>
 
           <!-- Done Button -->
-          <div class="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
-            <button
-              @click="closeModal"
-              class="w-full px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
-            >
-              Done
-            </button>
+          <div class="mt-5 pt-5" style="border-top: 1px solid var(--border-subtle);">
+            <button @click="closeModal" class="btn-secondary w-full">Done</button>
           </div>
         </div>
       </div>
-    </div>
+    </Teleport>
   </div>
 </template>
 

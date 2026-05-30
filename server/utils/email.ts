@@ -19,6 +19,13 @@ export async function sendMagicLink(email: string, token: string): Promise<void>
   const config = useRuntimeConfig()
   const magicLinkUrl = `${config.public.baseUrl}/auth/verify?token=${token}`
 
+  // Dev fallback: with no email provider configured, log the link instead of
+  // failing so local sign-in still works without Resend set up.
+  if (!config.resendApiKey) {
+    console.log(`\n[Email] RESEND_API_KEY not set — magic link for ${email}:\n${magicLinkUrl}\n`)
+    return
+  }
+
   const resend = getResendClient()
 
   try {

@@ -2,7 +2,11 @@ import type { DiscogsCollectionItem } from './discogs-client'
 
 /**
  * Background worker for importing Discogs collections
- * Processes import jobs and updates progress in real-time
+ * Processes import jobs and updates progress in real-time.
+ *
+ * This pass is intentionally fast: it stores Discogs `basic_information` only
+ * (no per-record release fetch). Full tracklists are fetched separately by the
+ * resumable backfill in `tracklist-backfill.ts`.
  */
 
 interface ImportJobContext {
@@ -125,17 +129,6 @@ async function processCollectionPage(
   jobId: string,
   items: DiscogsCollectionItem[]
 ): Promise<void> {
-  // Debug log first item to see what data is available
-  if (items.length > 0) {
-    const firstItem = items[0]
-    console.log('[Import Worker DEBUG] First item in page:')
-    console.log('  - Has media_condition:', !!firstItem.media_condition, firstItem.media_condition)
-    console.log('  - Has sleeve_condition:', !!firstItem.sleeve_condition, firstItem.sleeve_condition)
-    console.log('  - Has community:', !!firstItem.basic_information.community)
-    console.log('  - Has tracklist in basic_info:', !!(firstItem.basic_information as any).tracklist)
-    console.log('  - Basic info keys:', Object.keys(firstItem.basic_information))
-  }
-
   for (const item of items) {
     try {
       await processCollectionItem(userId, item)
@@ -225,7 +218,13 @@ async function processCollectionItem(
       }
     })
   } else {
-    // Update existing release with new fields (if they're missing)
+    // Update existing release with new fields (if they're missing).
+    // Note: we DON'T overwrite discogsData here when it already holds a full
+    // release (with tracklist) — basic_information is sparser. Only seed it when
+    // there's nothing better yet.
+    const existingData = release.discogsData as any
+    const existingHasTracklist = Array.isArray(existingData?.tracklist) && existingData.tracklist.length > 0
+
     release = await prisma.release.update({
       where: { id: release.id },
       data: {
@@ -237,7 +236,7 @@ async function processCollectionItem(
         thumbUrl: basicInfo.thumb || release.thumbUrl,
         communityHave: communityHave || release.communityHave,
         communityWant: communityWant || release.communityWant,
-        discogsData: basicInfo as any, // Always update to get latest data
+        ...(existingHasTracklist ? {} : { discogsData: basicInfo as any }),
       }
     })
   }

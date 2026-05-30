@@ -14,10 +14,11 @@ datasource db {
 // ==========================================
 
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String? // scrypt "salt:hash" for email+password login
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   // Discogs connection
   discogsUsername String?
@@ -34,8 +35,29 @@ model User {
   analysisJobs    AnalysisJob[]
   tags            Tag[]
   setlists        Setlist[]
+  tracklistJobs   TracklistJob[]
 
   @@index([email])
+}
+
+// Resumable background pass that fetches full Discogs releases (tracklists)
+// for records imported with only basic_information.
+model TracklistJob {
+  id             String    @id @default(cuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status         String    @default("pending") // pending | in_progress | completed | failed
+  totalItems     Int       @default(0)
+  processedItems Int       @default(0)
+  failedItems    Int       @default(0)
+  errorMessage   String?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([status])
 }
 
 model MagicLinkToken {
@@ -98,6 +120,11 @@ model Release {
   @@index([discogsId])
   @@index([artist]) // For search
   @@index([title])  // For search
+  @@index([year])    // Year-range filtering
+  @@index([country]) // Country filtering
+  @@index([label])   // Label filtering
+  @@index([genres], type: Gin)  // Array `hasSome` genre filtering
+  @@index([styles], type: Gin)  // Array `hasSome` style filtering
 }
 
 // ==========================================
@@ -139,8 +166,7 @@ model UserRecord {
   tracks          Track[]
 
   @@unique([userId, releaseId]) // User can only own a release once
-  @@index([userId])
-  @@index([addedAt]) // For "recently added" views
+  @@index([userId, addedAt]) // Keyset for the userId-filtered "recently added" list (also serves userId-only lookups)
 }
 
 // ==========================================
