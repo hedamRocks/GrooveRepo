@@ -1,0 +1,19 @@
+# Local DJ-analysis worker.
+#   docker compose up -d --build      # start (rebuilds image)
+#   docker compose logs -f            # watch it process jobs
+#   docker compose down               # stop
+#
+# Reads DATABASE_URL + YOUTUBE_API_KEY from your .env (same file the app uses).
+services:
+  worker:
+    build: .
+    env_file: .env
+    restart: unless-stopped
+
+    # Optional — mount a YouTube cookies.txt for age-gated / bot-checked videos.
+    # Export cookies from your browser, save as ./youtube-cookies.txt, then
+    # uncomment both blocks:
+    # volumes:
+    #   - ./youtube-cookies.txt:/app/cookies.txt:ro
+    # environment:
+    #   - YOUTUBE_COOKIES_PATH=/app/cookies.txt

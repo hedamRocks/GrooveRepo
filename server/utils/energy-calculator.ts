@@ -1,3 +1,5 @@
+import { prisma } from './prisma'
+
 /**
  * Energy Score Calculator and Normalizer
  * Computes 0.0-1.0 energy score using percentile ranking

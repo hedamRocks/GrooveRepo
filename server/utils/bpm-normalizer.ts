@@ -1,3 +1,5 @@
+import { prisma } from './prisma'
+
 /**
  * BPM Normalization Logic
  * Corrects half-time / double-time detection errors
