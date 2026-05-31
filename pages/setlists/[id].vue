@@ -24,7 +24,17 @@
           </div>
         </div>
 
-        <div class="flex items-center gap-1 shrink-0">
+        <div class="flex items-center gap-1.5 shrink-0">
+          <button
+            v-if="setlist.tracks.length > 0"
+            @click="analyzeAllSetlistTracks"
+            :disabled="isAnalyzingSetlist"
+            class="btn-secondary !py-2 !px-3.5 text-sm disabled:opacity-60"
+            title="Analyze BPM / key / energy for all tracks"
+          >
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+            <span class="hidden sm:inline">{{ isAnalyzingSetlist ? 'Analyzing…' : 'Analyze' }}</span>
+          </button>
           <button @click="exportToCSV" class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/[0.06] transition-all" style="color: var(--text-secondary);" title="Export to CSV">
             <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -37,6 +47,18 @@
           </button>
         </div>
       </div>
+
+      <!-- Analysis progress -->
+      <div v-if="isAnalyzingSetlist" class="surface-2 px-3 py-2.5 mb-4">
+        <div class="flex items-center justify-between text-[11px] font-mono mb-1.5" style="color: var(--text-secondary);">
+          <span>Analyzing {{ analysisProcessed }} / {{ analysisTotal || '…' }} tracks<span v-if="analysisFailed"> · {{ analysisFailed }} failed</span></span>
+          <span class="font-semibold" style="color: var(--accent);">{{ analysisProgress }}%</span>
+        </div>
+        <div class="w-full h-1.5 rounded-full overflow-hidden" style="background: var(--bg-secondary);">
+          <div class="h-full rounded-full transition-all duration-500" style="background: var(--accent);" :style="{ width: `${analysisProgress}%` }"></div>
+        </div>
+      </div>
+      <p v-if="analysisError" class="text-xs mb-4" style="color: #ff6b6b;">{{ analysisError }}</p>
 
       <!-- Filters -->
       <div v-if="setlist.tracks.length > 0" class="space-y-2 mb-4">
@@ -530,6 +552,24 @@ interface Setlist {
 
 const setlist = ref<Setlist | null>(null)
 const isLoading = ref(true)
+
+// Analyze all tracks in the setlist (shared composable: polling + progress)
+const {
+  isAnalyzing: isAnalyzingSetlist,
+  total: analysisTotal,
+  processed: analysisProcessed,
+  failed: analysisFailed,
+  progress: analysisProgress,
+  error: analysisError,
+  start: startAnalysis,
+} = useTrackAnalysis(() => fetchSetlist())
+
+async function analyzeAllSetlistTracks() {
+  const ids = setlist.value?.tracks?.map((t) => t.track.id) || []
+  if (ids.length === 0) return
+  await startAnalysis({ trackIds: ids })
+}
+
 const showAddTrackModal = ref(false)
 const showBpmModal = ref(false)
 const showRemoveModal = ref(false)
