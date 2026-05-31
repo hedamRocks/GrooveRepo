@@ -187,10 +187,12 @@ model Track {
   duration String? // Duration string (e.g. "4:23")
 
   // DJ Metadata (analyzed per-track)
-  bpm        Int?
-  key        String? // e.g. "D minor", "C major"
-  energy     Int?    // 0-10 scale
-  confidence Float?  // 0.0-1.0 analysis confidence
+  bpm           Int?
+  key           String? // e.g. "D minor", "C major"
+  energy        Int?    // 0-10 scale
+  confidence    Float?  // 0.0-1.0 BPM analysis confidence
+  keyConfidence Float?  // 0.0-1.0 key analysis confidence
+  needsReview   Boolean @default(false) // low-confidence — flag for manual verify
 
   // YouTube source for analysis
   youtubeId    String?

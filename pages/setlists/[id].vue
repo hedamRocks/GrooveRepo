@@ -24,7 +24,17 @@
           </div>
         </div>
 
-        <div class="flex items-center gap-1 shrink-0">
+        <div class="flex items-center gap-1.5 shrink-0">
+          <button
+            v-if="setlist.tracks.length > 0"
+            @click="analyzeAllSetlistTracks"
+            :disabled="isAnalyzingSetlist"
+            class="btn-secondary !py-2 !px-3.5 text-sm disabled:opacity-60"
+            title="Analyze BPM / key / energy for all tracks"
+          >
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+            <span class="hidden sm:inline">{{ isAnalyzingSetlist ? 'Analyzing…' : 'Analyze' }}</span>
+          </button>
           <button @click="exportToCSV" class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/[0.06] transition-all" style="color: var(--text-secondary);" title="Export to CSV">
             <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -37,6 +47,18 @@
           </button>
         </div>
       </div>
+
+      <!-- Analysis progress -->
+      <div v-if="isAnalyzingSetlist" class="surface-2 px-3 py-2.5 mb-4">
+        <div class="flex items-center justify-between text-[11px] font-mono mb-1.5" style="color: var(--text-secondary);">
+          <span>Analyzing {{ analysisProcessed }} / {{ analysisTotal || '…' }} tracks<span v-if="analysisFailed"> · {{ analysisFailed }} failed</span></span>
+          <span class="font-semibold" style="color: var(--accent);">{{ analysisProgress }}%</span>
+        </div>
+        <div class="w-full h-1.5 rounded-full overflow-hidden" style="background: var(--bg-secondary);">
+          <div class="h-full rounded-full transition-all duration-500" style="background: var(--accent);" :style="{ width: `${analysisProgress}%` }"></div>
+        </div>
+      </div>
+      <p v-if="analysisError" class="text-xs mb-4" style="color: #ff6b6b;">{{ analysisError }}</p>
 
       <!-- Filters -->
       <div v-if="setlist.tracks.length > 0" class="space-y-2 mb-4">
@@ -139,12 +161,27 @@
 
               <div class="flex flex-wrap gap-1.5 items-center">
                 <span class="chip !py-0.5 !px-2 font-mono uppercase !text-[10px]">{{ setlistTrack.track.position }}</span>
-                <button @click="openBpmModal(setlistTrack)" class="chip chip-active !py-0.5 !px-2 font-mono !text-[10px]">
+                <button @click="openBpmModal(setlistTrack)" class="chip chip-active !py-0.5 !px-2 font-mono !text-[10px]" title="Tap to set BPM">
                   <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
                   </svg>
                   {{ setlistTrack.manualBpm || setlistTrack.track.bpm || '—' }}
                 </button>
+                <!-- One-tap octave fix (the common half/double-time error) -->
+                <template v-if="setlistTrack.manualBpm || setlistTrack.track.bpm">
+                  <button @click.stop="quickOctave(setlistTrack, 0.5)" class="chip !py-0.5 !px-1.5 font-mono !text-[10px]" title="Halve BPM">÷2</button>
+                  <button @click.stop="quickOctave(setlistTrack, 2)" class="chip !py-0.5 !px-1.5 font-mono !text-[10px]" title="Double BPM">×2</button>
+                </template>
+                <span v-if="setlistTrack.track.key" class="chip !py-0.5 !px-2 font-mono !text-[10px]" title="Detected key">{{ setlistTrack.track.key }}</span>
+                <span
+                  v-if="setlistTrack.track.needsReview"
+                  class="chip !py-0.5 !px-2 !text-[10px] inline-flex items-center gap-1"
+                  style="border-color: var(--accent); color: var(--accent);"
+                  title="Low-confidence analysis — verify BPM/key"
+                >
+                  <svg class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" /></svg>
+                  verify
+                </span>
                 <span v-if="setlistTrack.track.userRecord?.release?.country" class="chip !py-0.5 !px-2 !text-[10px]">{{ setlistTrack.track.userRecord.release.country }}</span>
               </div>
 
@@ -474,6 +511,9 @@ interface Track {
   title: string
   artist: string
   bpm: number | null
+  key?: string | null
+  keyConfidence?: number | null
+  needsReview?: boolean
   createdAt?: string
   userRecord?: {
     release?: {
@@ -512,6 +552,24 @@ interface Setlist {
 
 const setlist = ref<Setlist | null>(null)
 const isLoading = ref(true)
+
+// Analyze all tracks in the setlist (shared composable: polling + progress)
+const {
+  isAnalyzing: isAnalyzingSetlist,
+  total: analysisTotal,
+  processed: analysisProcessed,
+  failed: analysisFailed,
+  progress: analysisProgress,
+  error: analysisError,
+  start: startAnalysis,
+} = useTrackAnalysis(() => fetchSetlist())
+
+async function analyzeAllSetlistTracks() {
+  const ids = setlist.value?.tracks?.map((t) => t.track.id) || []
+  if (ids.length === 0) return
+  await startAnalysis({ trackIds: ids })
+}
+
 const showAddTrackModal = ref(false)
 const showBpmModal = ref(false)
 const showRemoveModal = ref(false)
@@ -723,6 +781,23 @@ function openBpmModal(setlistTrack: SetlistTrack) {
 async function handleBpmSelected(bpm: number) {
   manualBpm.value = bpm
   await updateBpm()
+}
+
+// One-tap octave correction (½× / 2×) — the common BPM-detection error.
+async function quickOctave(setlistTrack: SetlistTrack, factor: number) {
+  const current = setlistTrack.manualBpm || setlistTrack.track.bpm
+  if (!current) return
+  const newBpm = Math.round(current * factor)
+  if (newBpm < 40 || newBpm > 300) return
+  try {
+    await $fetch(`/api/setlists/${setlist.value!.id}/tracks/update-bpm`, {
+      method: 'POST',
+      body: { trackId: setlistTrack.trackId, manualBpm: newBpm }
+    })
+    await fetchSetlist()
+  } catch (error) {
+    console.error('Failed to update BPM:', error)
+  }
 }
 
 async function updateBpm() {

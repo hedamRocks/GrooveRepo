@@ -114,13 +114,20 @@ async function removeFromShelf(shelfId: string) {
   }
 }
 
-// Track analysis
-const isAnalyzingTracks = ref(false)
+// Track analysis (shared composable handles polling + progress + cleanup)
 const analyzingTrackId = ref<string | null>(null)
-const analysisJobId = ref<string | null>(null)
-const analysisProgress = ref(0)
-let analysisInterval: NodeJS.Timeout | null = null
-let analysisFailures = 0
+const {
+  isAnalyzing: isAnalyzingTracks,
+  total: analysisTotal,
+  processed: analysisProcessed,
+  failed: analysisFailed,
+  progress: analysisProgress,
+  error: analysisError,
+  start: startAnalysis,
+} = useTrackAnalysis(async () => {
+  await fetchRecord()
+  analyzingTrackId.value = null
+})
 
 // Track editing
 const editingTrackId = ref<string | null>(null)
@@ -158,106 +165,18 @@ function cancelEditBpm() {
 
 async function analyzeAllTracks() {
   if (!record.value?.tracks?.length) return
-
-  if (!confirm(`Analyze DJ metadata (BPM, key, energy) for all ${record.value.tracks.length} tracks? This will take ~${Math.ceil(record.value.tracks.length * 15 / 60)} minutes.`)) {
-    return
-  }
-
-  isAnalyzingTracks.value = true
-  try {
-    const trackIds = record.value.tracks.map((t: any) => t.id)
-
-    const response = await $fetch<{
-      jobId: string
-      status: string
-      totalTracks: number
-    }>('/api/analysis/start', {
-      method: 'POST',
-      body: { trackIds }
-    })
-
-    analysisJobId.value = response.jobId
-
-    // Start polling for progress
-    pollAnalysisProgress()
-  } catch (error: any) {
-    alert(error.data?.message || 'Failed to start track analysis')
-    isAnalyzingTracks.value = false
-  }
+  await startAnalysis({ trackIds: record.value.tracks.map((t: any) => t.id) })
 }
 
 async function analyzeSingleTrack(trackId: string) {
   analyzingTrackId.value = trackId
-  try {
-    const response = await $fetch<{
-      jobId: string
-      status: string
-    }>('/api/analysis/start', {
-      method: 'POST',
-      body: { trackIds: [trackId] }
-    })
-
-    analysisJobId.value = response.jobId
-    pollAnalysisProgress()
-  } catch (error: any) {
-    alert(error.data?.message || 'Failed to start track analysis')
-    analyzingTrackId.value = null
-  }
-}
-
-function stopAnalysisPolling() {
-  if (analysisInterval) {
-    clearInterval(analysisInterval)
-    analysisInterval = null
-  }
-}
-
-async function pollAnalysisProgress() {
-  if (!analysisJobId.value) return
-  analysisFailures = 0
-  stopAnalysisPolling()
-
-  analysisInterval = setInterval(async () => {
-    try {
-      const status = await $fetch<{
-        status: string
-        progress: number
-        processed: number
-        failed: number
-        errorMessage?: string
-      }>(`/api/analysis/${analysisJobId.value}`)
-      analysisFailures = 0
-
-      analysisProgress.value = status.progress
-
-      if (status.status === 'completed') {
-        stopAnalysisPolling()
-        isAnalyzingTracks.value = false
-        analyzingTrackId.value = null
-        await fetchRecord() // Reload to show updated metadata
-        analysisJobId.value = null
-      } else if (status.status === 'failed') {
-        stopAnalysisPolling()
-        isAnalyzingTracks.value = false
-        analyzingTrackId.value = null
-        analysisJobId.value = null
-      }
-    } catch (error) {
-      if (++analysisFailures >= 3) {
-        stopAnalysisPolling()
-        isAnalyzingTracks.value = false
-        analyzingTrackId.value = null
-      }
-    }
-  }, 3000) // Poll every 3 seconds
+  await startAnalysis({ trackIds: [trackId] })
 }
 
 onMounted(() => {
   fetchRecord()
   fetchShelves()
 })
-
-onUnmounted(stopAnalysisPolling)
 </script>
 
 <template>
@@ -400,12 +319,25 @@ onUnmounted(stopAnalysisPolling)
               <button
                 @click="analyzeAllTracks"
                 :disabled="isAnalyzingTracks"
-                class="text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                class="text-xs font-medium disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
                 style="color: var(--accent);"
               >
-                {{ isAnalyzingTracks ? `Analyzing… ${analysisProgress}%` : 'Analyze all tracks' }}
+                {{ isAnalyzingTracks ? 'Analyzing…' : 'Analyze all tracks' }}
               </button>
             </div>
+
+            <!-- Analysis progress -->
+            <div v-if="isAnalyzingTracks" class="mb-4 surface-2 px-3 py-2.5">
+              <div class="flex items-center justify-between text-[11px] font-mono mb-1.5" style="color: var(--text-secondary);">
+                <span>{{ analysisProcessed }} / {{ analysisTotal || '…' }} tracks<span v-if="analysisFailed"> · {{ analysisFailed }} failed</span></span>
+                <span class="font-semibold" style="color: var(--accent);">{{ analysisProgress }}%</span>
+              </div>
+              <div class="w-full h-1.5 rounded-full overflow-hidden" style="background: var(--bg-secondary);">
+                <div class="h-full rounded-full transition-all duration-500" style="background: var(--accent);" :style="{ width: `${analysisProgress}%` }"></div>
+              </div>
+            </div>
+            <p v-if="analysisError" class="mb-4 text-xs" style="color: #ff6b6b;">{{ analysisError }}</p>
+
             <div class="surface divide-y" style="--tw-divide-opacity: 1;">
               <div
                 v-for="track in record.tracks"

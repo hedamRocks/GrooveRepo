@@ -1,5 +1,6 @@
 import { spawn } from 'child_process'
 import * as MusicTempoModule from 'music-tempo'
+import { magnitudeSpectrum } from './fft'
 
 // Handle both CommonJS and ES module exports
 const MusicTempo = (MusicTempoModule as any).default || MusicTempoModule
@@ -15,6 +16,7 @@ export interface AudioFeatures {
   bpmConfidence: number
   bpmCandidates: number[]  // Alternative BPM values detected
   key: string              // e.g. "D minor", "C major"
+  keyCamelot: string       // e.g. "8B" (Camelot wheel for harmonic mixing)
   keyConfidence: number
   energy: {
     loudness: number       // RMS loudness
@@ -45,14 +47,21 @@ export async function analyzeAudio(
     // Note: This is a simplified version - in production you'd need proper audio decoding
     const audioData = await decodeAudioBuffer(audioBuffer, samplingOptions)
 
-    // Extract BPM
-    const bpmResult = extractBPM(audioData)
+    // Extract BPM via multi-window consensus (robust to one bad section)
+    const bpmResult = extractBPMConsensus(audioData)
 
     // Extract musical key
     const keyResult = extractKey(audioData)
 
     // Extract energy components
     const energyResult = extractEnergyFeatures(audioData)
+
+    // Replace the rough RMS loudness with a real EBU R128 integrated loudness
+    // measurement (ffmpeg) when available — far more meaningful for "energy".
+    const lufs = await measureLoudnessLUFS(audioBuffer)
+    if (lufs !== null) {
+      energyResult.loudness = lufs
+    }
 
     // Calculate raw energy score
     const rawEnergy = calculateRawEnergy(energyResult)
@@ -68,6 +77,7 @@ export async function analyzeAudio(
       bpmConfidence: bpmResult.confidence,
       bpmCandidates: bpmResult.candidates,
       key: keyResult.key,
+      keyCamelot: keyResult.camelot,
       keyConfidence: keyResult.confidence,
       energy: energyResult,
       rawEnergy
@@ -165,6 +175,101 @@ function extractBPM(audioData: Float32Array): {
       candidates: [Math.round(fallbackBPM / 2), fallbackBPM, Math.round(fallbackBPM * 2)]
     }
   }
+}
+
+/**
+ * Multi-window BPM consensus.
+ * Splits the audio into a few segments, runs BPM detection on each, and takes
+ * the agreement — far more robust than a single window (one intro/breakdown
+ * section can't drag the whole estimate to a wrong octave). Confidence reflects
+ * how much the segments agreed. Octave decisions are left to the normalizer.
+ */
+function extractBPMConsensus(audioData: Float32Array): {
+  bpm: number
+  confidence: number
+  candidates: number[]
+} {
+  const sampleRate = 44100
+  const minSegment = sampleRate * 8 // need ~8s for a stable estimate
+  const segments = 3
+
+  // Too short to split meaningfully → single-window path
+  if (audioData.length < minSegment * segments) {
+    return extractBPM(audioData)
+  }
+
+  const segLen = Math.floor(audioData.length / segments)
+  const perWindow: number[] = []
+  for (let s = 0; s < segments; s++) {
+    try {
+      const seg = audioData.subarray(s * segLen, (s + 1) * segLen)
+      perWindow.push(extractBPM(seg).bpm)
+    } catch {
+      // skip a failed segment
+    }
+  }
+
+  if (perWindow.length === 0) return extractBPM(audioData)
+
+  // Fold to a canonical octave [80,160) purely to MEASURE agreement.
+  const fold = (b: number) => {
+    let x = b
+    while (x < 80) x *= 2
+    while (x >= 160) x /= 2
+    return x
+  }
+  const folded = perWindow.map(fold)
+  const sortedFolded = [...folded].sort((a, b) => a - b)
+  const medianFolded = sortedFolded[Math.floor(sortedFolded.length / 2)]
+  const agree = folded.filter((b) => Math.abs(b - medianFolded) <= 3).length
+
+  // Representative raw BPM = median of the raw detections (preserves octave info
+  // so the genre-aware normalizer can still make the final octave call).
+  const sortedRaw = [...perWindow].sort((a, b) => a - b)
+  const bpm = Math.round(sortedRaw[Math.floor(sortedRaw.length / 2)])
+
+  const confidence = agree === folded.length ? 0.92 : agree >= 2 ? 0.78 : 0.55
+
+  const candidates = Array.from(
+    new Set([bpm, Math.round(bpm / 2), Math.round(bpm * 2), Math.round(medianFolded)])
+  ).filter((b) => b >= 60 && b <= 200).sort((a, b) => a - b)
+
+  console.log(`[Audio Analyzer] BPM consensus: windows=[${perWindow.join(', ')}], agree=${agree}/${folded.length}, bpm=${bpm}, conf=${confidence}`)
+
+  return { bpm, confidence, candidates }
+}
+
+/**
+ * Measure integrated loudness (EBU R128 / LUFS) via ffmpeg's loudnorm filter.
+ * Returns null if ffmpeg/measurement fails, so callers can fall back.
+ */
+async function measureLoudnessLUFS(buffer: Buffer): Promise<number | null> {
+  return new Promise((resolve) => {
+    const ff = spawn('ffmpeg', [
+      '-i', 'pipe:0',
+      '-af', 'loudnorm=print_format=json',
+      '-f', 'null', '-',
+      '-hide_banner',
+    ])
+
+    let err = ''
+    ff.stderr.on('data', (d) => { err += d.toString() })
+    ff.on('close', () => {
+      const m = err.match(/\{[\s\S]*?"input_i"[\s\S]*?\}/)
+      if (!m) return resolve(null)
+      try {
+        const json = JSON.parse(m[0])
+        const i = parseFloat(json.input_i)
+        resolve(Number.isFinite(i) ? i : null)
+      } catch {
+        resolve(null)
+      }
+    })
+    ff.on('error', () => resolve(null))
+    ff.stdin.on('error', () => {})
+    ff.stdin.write(buffer)
+    ff.stdin.end()
+  })
 }
 
 /**
@@ -269,6 +374,7 @@ function estimateBPMFromOnsets(audioData: Float32Array): number {
 function extractKey(audioData: Float32Array): {
   key: string
   confidence: number
+  camelot: string
 } {
   try {
     // Extract chroma features (pitch class distribution)
@@ -280,85 +386,96 @@ function extractKey(audioData: Float32Array): {
 
     const keyNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
 
-    let bestCorrelation = -1
-    let bestKey = 'Unknown'
-    let bestScale = 'major'
-
-    // Test all 12 keys in both major and minor
+    // Score every key/scale, keep the ranking so we can measure how decisive
+    // the winner is (margin over the runner-up → confidence).
+    // For a candidate tonic at pitch class i, the tonic-relative profile must be
+    // rotated RIGHT by i so profile[0] (the tonic weight) lines up with chroma[i].
+    // rotateArray rotates left, so we rotate by (12 - i).
+    const scored: Array<{ key: string; scale: string; corr: number }> = []
     for (let i = 0; i < 12; i++) {
-      // Test major
-      const majorCorr = correlate(chroma, rotateArray(majorProfile, i))
-      if (majorCorr > bestCorrelation) {
-        bestCorrelation = majorCorr
-        bestKey = keyNames[i]
-        bestScale = 'major'
-      }
-
-      // Test minor
-      const minorCorr = correlate(chroma, rotateArray(minorProfile, i))
-      if (minorCorr > bestCorrelation) {
-        bestCorrelation = minorCorr
-        bestKey = keyNames[i]
-        bestScale = 'minor'
-      }
+      const shift = (12 - i) % 12
+      scored.push({ key: keyNames[i], scale: 'major', corr: correlate(chroma, rotateArray(majorProfile, shift)) })
+      scored.push({ key: keyNames[i], scale: 'minor', corr: correlate(chroma, rotateArray(minorProfile, shift)) })
     }
+    scored.sort((a, b) => b.corr - a.corr)
 
-    // Normalize correlation to confidence (0-1)
-    const confidence = Math.max(0, Math.min(1, (bestCorrelation + 1) / 2))
+    const best = scored[0]
+    const runnerUp = scored[1]
+    const margin = best.corr - runnerUp.corr
+
+    // Confidence blends absolute fit with how clearly the winner beats the
+    // next candidate. A strong, decisive match → high confidence; a flat
+    // chroma where everything correlates similarly → low.
+    const normCorr = Math.max(0, Math.min(1, (best.corr + 1) / 2))
+    const marginScaled = Math.max(0, Math.min(1, margin / 0.15))
+    const confidence = Math.max(0, Math.min(1, normCorr * 0.5 + marginScaled * 0.5))
 
     return {
-      key: `${bestKey} ${bestScale}`,
-      confidence
+      key: `${best.key} ${best.scale}`,
+      confidence,
+      camelot: toCamelot(best.key, best.scale),
     }
   } catch (error) {
     console.warn('[Audio Analyzer] Key extraction failed:', error)
-    return {
-      key: 'Unknown',
-      confidence: 0
-    }
+    return { key: 'Unknown', confidence: 0, camelot: '' }
   }
 }
 
 /**
- * Extract chroma features (pitch class distribution)
- * Simplified version using FFT-like frequency binning
+ * Camelot wheel notation for harmonic mixing (e.g. C major -> 8B, A minor -> 8A).
+ */
+function toCamelot(note: string, scale: string): string {
+  const major: Record<string, string> = {
+    C: '8B', 'C#': '3B', D: '10B', 'D#': '5B', E: '12B', F: '7B',
+    'F#': '2B', G: '9B', 'G#': '4B', A: '11B', 'A#': '6B', B: '1B',
+  }
+  const minor: Record<string, string> = {
+    C: '5A', 'C#': '12A', D: '7A', 'D#': '2A', E: '9A', F: '4A',
+    'F#': '11A', G: '6A', 'G#': '1A', A: '8A', 'A#': '3A', B: '10A',
+  }
+  return (scale === 'minor' ? minor[note] : major[note]) || ''
+}
+
+/**
+ * Extract a chroma vector (12-bin pitch-class energy distribution) using a
+ * real FFT. Unlike single-pitch autocorrelation, this captures the full
+ * polyphonic spectrum (bass + chords + melody), which is what key detection
+ * actually needs.
  */
 function extractChromaFeatures(audioData: Float32Array): number[] {
-  // Initialize 12 chroma bins (one per semitone)
   const chroma = new Array(12).fill(0)
 
-  // Sample rate
   const sampleRate = 44100
-
-  // Window size for frequency analysis (smaller = faster but less accurate)
-  const windowSize = 4096
+  // Large window for fine frequency resolution: bin width = 44100/16384 ≈ 2.7 Hz,
+  // narrow enough to resolve semitones down into the bass (a smaller window
+  // smears low notes across pitch classes → tritone key errors).
+  const windowSize = 16384 // power of two (required by FFT)
   const hopSize = windowSize / 2
 
-  // Process audio in windows
-  for (let i = 0; i < audioData.length - windowSize; i += hopSize) {
-    // Extract window
-    const window = audioData.slice(i, i + windowSize)
+  // Restrict to the musically useful band (~A1 to ~C7) to avoid sub-bass rumble
+  // and high-frequency noise/percussion skewing the pitch classes.
+  const minFreq = 55
+  const maxFreq = 2200
+  const kMin = Math.max(1, Math.floor((minFreq * windowSize) / sampleRate))
+  const kMax = Math.min(windowSize / 2 - 1, Math.ceil((maxFreq * windowSize) / sampleRate))
 
-    // Apply Hann window to reduce spectral leakage
-    const windowed = applyHannWindow(window)
+  for (let i = 0; i + windowSize <= audioData.length; i += hopSize) {
+    const windowed = applyHannWindow(audioData.slice(i, i + windowSize))
+    const mag = magnitudeSpectrum(windowed)
 
-    // Simplified spectral analysis (approximation of FFT)
-    // We'll use autocorrelation for pitch detection
-    const pitchFreq = detectPitchFrequency(windowed, sampleRate)
-
-    if (pitchFreq > 0) {
-      // Convert frequency to pitch class (0-11)
-      const pitchClass = frequencyToPitchClass(pitchFreq)
-      chroma[pitchClass] += 1
+    for (let k = kMin; k <= kMax; k++) {
+      const m = mag[k]
+      if (m <= 0) continue
+      const freq = (k * sampleRate) / windowSize
+      const pitchClass = frequencyToPitchClass(freq)
+      chroma[pitchClass] += m
     }
   }
 
-  // Normalize chroma
+  // Normalize so the vector sums to 1 (scale-invariant for correlation)
   const sum = chroma.reduce((a, b) => a + b, 0)
   if (sum > 0) {
-    for (let i = 0; i < 12; i++) {
-      chroma[i] /= sum
-    }
+    for (let i = 0; i < 12; i++) chroma[i] /= sum
   }
 
   return chroma
@@ -374,37 +491,6 @@ function applyHannWindow(data: Float32Array): Float32Array {
     windowed[i] = data[i] * windowValue
   }
   return windowed
-}
-
-/**
- * Detect pitch frequency using autocorrelation
- */
-function detectPitchFrequency(audioData: Float32Array, sampleRate: number): number {
-  const minFreq = 80 // Hz (low E2)
-  const maxFreq = 1000 // Hz (high C6)
-
-  const minPeriod = Math.floor(sampleRate / maxFreq)
-  const maxPeriod = Math.floor(sampleRate / minFreq)
-
-  let bestCorrelation = 0
-  let bestPeriod = 0
-
-  // Autocorrelation
-  for (let period = minPeriod; period < maxPeriod && period < audioData.length / 2; period++) {
-    let correlation = 0
-    for (let i = 0; i < audioData.length - period; i++) {
-      correlation += audioData[i] * audioData[i + period]
-    }
-
-    if (correlation > bestCorrelation) {
-      bestCorrelation = correlation
-      bestPeriod = period
-    }
-  }
-
-  if (bestPeriod === 0) return 0
-
-  return sampleRate / bestPeriod
 }
 
 /**

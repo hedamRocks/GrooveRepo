@@ -102,6 +102,8 @@ export default defineEventHandler(async (event) => {
             key: st.track.key,
             energy: st.track.energy,
             confidence: st.track.confidence,
+            keyConfidence: st.track.keyConfidence,
+            needsReview: st.track.needsReview,
             trackTags: st.track.trackTags,
             userRecord: {
               release: {

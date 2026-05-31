@@ -151,9 +151,11 @@ export async function resolveYouTubeVideo(
           part: ['snippet'],
           q: query,
           type: ['video'],
-          maxResults: 10,
-          videoCategoryId: '10', // Music category
-          videoDuration: 'medium', // Pre-filter to 4-20 min videos (excludes very short and very long)
+          maxResults: 15,
+          // No videoDuration filter: 'medium' (4–20 min) silently excluded every
+          // sub-4-minute song — i.e. most funk/soul/pop singles. No category
+          // filter either: obscure vinyl uploads are often mis-categorised.
+          // Quality is enforced by scoreCandidate() below instead.
           safeSearch: 'none'
         })
       },
@@ -213,7 +215,7 @@ export async function resolveYouTubeVideo(
           score
         }
       })
-      .filter(c => c.score > 0.3) // Filter out very low scores
+      .filter(c => c.score > 0.25) // Filter out very low scores
 
     if (candidates.length === 0) {
       console.log('[YouTube Resolver] No candidates passed minimum score threshold')
@@ -234,8 +236,15 @@ export async function resolveYouTubeVideo(
       duration: winner.duration
     }
 
-  } catch (error) {
-    console.error('[YouTube Resolver] Error:', error)
+  } catch (error: any) {
+    const reason =
+      error?.errors?.[0]?.reason ||
+      error?.response?.data?.error?.errors?.[0]?.reason
+    if (reason === 'quotaExceeded' || error?.code === 403) {
+      console.error('[YouTube Resolver] YouTube API quota exceeded — every resolve will fail until the quota resets (midnight Pacific). A search costs 100 of the default 10,000 units/day (~100 tracks/day).')
+    } else {
+      console.error('[YouTube Resolver] Error:', error)
+    }
     return null
   }
 }
@@ -262,10 +271,17 @@ function scoreCandidate(
 ): number {
   let score = 0
 
-  // 1. Title similarity (70% weight)
-  const expectedTitle = `${track.artist} ${track.title}`.toLowerCase()
+  // 1. Title similarity (70% weight). Compare against both "artist title" and
+  // just the title, taking the better match — official "Artist - Topic"
+  // channels title the video with only the track name, so an artist+title
+  // comparison alone would unfairly penalise the cleanest sources.
   const candidateTitle = candidate.title.toLowerCase()
-  const titleSimilarity = compareTwoStrings(expectedTitle, candidateTitle)
+  const artistTitle = `${track.artist} ${track.title}`.toLowerCase()
+  const titleOnly = track.title.toLowerCase()
+  const titleSimilarity = Math.max(
+    compareTwoStrings(artistTitle, candidateTitle),
+    compareTwoStrings(titleOnly, candidateTitle)
+  )
   score += titleSimilarity * 0.7
 
   // 2. Channel trust (15% weight)
@@ -273,6 +289,12 @@ function scoreCandidate(
     candidate.channelTitle.includes(keyword)
   ) ? 0.15 : 0
   score += channelBoost
+
+  // 2b. Credit when the artist appears in the channel (e.g. "Artist - Topic"),
+  // which carries the untouched master audio.
+  if (track.artist && candidate.channelTitle.toLowerCase().includes(track.artist.toLowerCase())) {
+    score += 0.1
+  }
 
   // 3. Duration match (10% weight)
   if (track.duration && candidate.duration) {
@@ -293,6 +315,11 @@ function scoreCandidate(
   // 5. Strong penalty for videos longer than 8 minutes (likely full albums or DJ sets)
   if (candidate.duration > 480) {
     return 0 // Immediate rejection for long videos
+  }
+
+  // 5b. Reject obvious clips/previews that are too short to be the full track
+  if (candidate.duration > 0 && candidate.duration < 30) {
+    return 0
   }
 
   // 6. Regular penalty for unwanted keywords (40% penalty - doubled)
