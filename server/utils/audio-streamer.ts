@@ -75,13 +75,14 @@ export async function streamAudioFromYouTube(
     console.log(`[Audio Streamer] Sampling ${sampleDuration}s starting at ${sampleStart}s`)
   }
 
-  // Path to cookies file from environment variable or default
-  const cookiesPath = process.env.YOUTUBE_COOKIES_PATH || '/Users/nicolaiolsen/stack/youtube-cookies.txt'
+  // Optional cookies file (helps with bot-checks / age-gated videos). Only
+  // passed when YOUTUBE_COOKIES_PATH is set — no hard-coded local path.
+  const cookiesPath = process.env.YOUTUBE_COOKIES_PATH
 
   return new Promise((resolve, reject) => {
     // Build yt-dlp arguments
     const ytdlpArgs = [
-      '--cookies', cookiesPath,     // Use cookies for authentication
+      ...(cookiesPath ? ['--cookies', cookiesPath] : []),
       '-f', 'bestaudio',            // Best audio quality
       '--no-playlist',              // Don't download playlists
       '-o', '-',                    // Output to stdout

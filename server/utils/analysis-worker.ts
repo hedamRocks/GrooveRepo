@@ -1,3 +1,4 @@
+import { prisma } from './prisma'
 import { resolveYouTubeVideo, type TrackMetadata } from './youtube-resolver'
 import { downloadAudioToBuffer } from './audio-streamer'
 import { analyzeAudio } from './audio-analyzer'
@@ -357,47 +358,6 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
-/**
- * Simple in-memory job queue with actual concurrency
- */
-class AnalysisQueue {
-  private activeJobs = 0
-  private readonly maxConcurrentJobs = 1 // Process one job at a time to avoid rate limits
-  private queue: AnalysisJobContext[] = []
-
-  async add(context: AnalysisJobContext): Promise<void> {
-    console.log(`[Analysis Queue] Adding job ${context.jobId} to queue (${this.queue.length} in queue, ${this.activeJobs} active)`)
-    this.queue.push(context)
-    this.processNext()
-  }
-
-  private async processNext(): Promise<void> {
-    // Start new jobs if we have capacity and items in queue
-    while (this.activeJobs < this.maxConcurrentJobs && this.queue.length > 0) {
-      const context = this.queue.shift()
-      if (!context) break
-
-      this.activeJobs++
-      console.log(`[Analysis Queue] Starting job ${context.jobId} (${this.activeJobs}/${this.maxConcurrentJobs} active)`)
-
-      // Process job without blocking (fire and forget)
-      processAnalysisJob(context)
-        .catch((error) => {
-          console.error('[Analysis Queue] Error processing job:', error)
-        })
-        .finally(() => {
-          this.activeJobs--
-          console.log(`[Analysis Queue] Completed job ${context.jobId} (${this.activeJobs}/${this.maxConcurrentJobs} active, ${this.queue.length} in queue)`)
-          // Try to process next job after this one completes
-          this.processNext()
-        })
-    }
-  }
-}
-
-// Singleton queue instance
-const analysisQueue = new AnalysisQueue()
-
-export function queueAnalysisJob(context: AnalysisJobContext): void {
-  analysisQueue.add(context)
-}
+// NOTE: jobs are no longer processed in-process. /api/analysis/start only
+// creates a pending AnalysisJob; the standalone worker (worker/index.ts, run
+// via Docker locally or on a host) claims and runs them. See worker/README.md.

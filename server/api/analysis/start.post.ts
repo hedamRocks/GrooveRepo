@@ -3,8 +3,6 @@
  * Creates AnalysisJob and queues background worker
  */
 
-import { queueAnalysisJob } from '~/server/utils/analysis-worker'
-
 export default defineEventHandler(async (event) => {
   try {
     // Get current user
@@ -35,16 +33,8 @@ export default defineEventHandler(async (event) => {
       analyzeAll?: boolean
     }
 
-    // Get YouTube API key from config
-    const config = useRuntimeConfig()
-    const youtubeApiKey = config.youtubeApiKey
-
-    if (!youtubeApiKey) {
-      throw createError({
-        statusCode: 500,
-        message: 'YouTube API key not configured. Please set YOUTUBE_API_KEY environment variable.'
-      })
-    }
+    // Note: the YouTube API key lives on the worker, not here — this endpoint
+    // only enqueues a job. The standalone worker (worker/index.ts) does the work.
 
     // Check if there's already an active analysis job
     const existingJob = await prisma.analysisJob.findFirst({
@@ -126,15 +116,9 @@ export default defineEventHandler(async (event) => {
       }
     })
 
-    // Queue analysis worker
-    queueAnalysisJob({
-      jobId: analysisJob.id,
-      userId: user.id,
-      trackIds: targetTrackIds,
-      youtubeApiKey
-    })
-
-    console.log(`[Analysis Start] Created job ${analysisJob.id}`)
+    // The standalone worker (worker/index.ts) polls Neon, claims this pending
+    // job, and processes it — serverless can't run yt-dlp/ffmpeg or long jobs.
+    console.log(`[Analysis Start] Created pending job ${analysisJob.id} (${targetTrackIds.length} tracks)`)
 
     return {
       jobId: analysisJob.id,

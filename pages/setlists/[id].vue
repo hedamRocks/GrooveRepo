@@ -123,7 +123,7 @@
         </div>
         <h3 class="display text-2xl mb-2">No tracks yet</h3>
         <p class="text-sm mb-6 max-w-xs" style="color: var(--text-secondary);">Start building your setlist by adding tracks from your collection.</p>
-        <button @click="showAddTrackModal = true" class="btn-primary inline-flex">Add your first track</button>
+        <button @click="openAddTrackModal" class="btn-primary inline-flex">Add your first track</button>
       </div>
 
       <!-- Tracks List -->
@@ -231,7 +231,7 @@
       <!-- Fixed Add Track Button -->
       <div class="fixed bottom-0 left-0 right-0 z-40 p-4 pointer-events-none" style="background: linear-gradient(to top, #0b0b0c 30%, transparent);">
         <div class="max-w-5xl mx-auto pointer-events-auto px-2 sm:px-4">
-          <button @click="showAddTrackModal = true" class="btn-primary w-full text-base">
+          <button @click="openAddTrackModal" class="btn-primary w-full text-base">
             <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" d="M12 5v14M5 12h14" /></svg>
             Add track
           </button>
@@ -241,91 +241,152 @@
 
     <!-- Add Track Modal -->
     <Teleport to="body">
-      <div v-if="showAddTrackModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[60] overflow-y-auto p-4" @click="showAddTrackModal = false">
+      <div v-if="showAddTrackModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[60] overflow-y-auto p-4" @click="closeAddTrackModal">
         <div class="surface max-w-2xl w-full my-8 max-h-[90vh] overflow-y-auto scale-in" style="box-shadow: var(--shadow-lg);" @click.stop>
           <div class="p-6">
-            <h2 class="display text-2xl mb-5">Add track</h2>
 
-            <!-- Tab Selector -->
-            <div class="flex gap-1 p-1 mb-5 rounded-full" style="background: var(--bg-tertiary);">
-              <button @click="addTrackMode = 'collection'" class="flex-1 px-4 py-2 rounded-full text-sm font-medium transition-colors" :style="addTrackMode === 'collection' ? 'background: var(--accent); color: #fff;' : 'color: var(--text-secondary);'">From collection</button>
-              <button @click="addTrackMode = 'discogs'" class="flex-1 px-4 py-2 rounded-full text-sm font-medium transition-colors" :style="addTrackMode === 'discogs' ? 'background: var(--accent); color: #fff;' : 'color: var(--text-secondary);'">From Discogs</button>
-            </div>
+            <!-- STEP 1: pick a record (from collection or Discogs) -->
+            <template v-if="addTrackStep === 'search'">
+              <h2 class="display text-2xl mb-5">Add tracks</h2>
 
-            <!-- Collection Search Mode -->
-            <div v-if="addTrackMode === 'collection'">
-              <div class="mb-4">
-                <input v-model="trackSearchQuery" type="text" placeholder="Search your collection…" class="input w-full px-4 py-2.5" @input="searchTracks" />
+              <!-- Tab Selector -->
+              <div class="flex gap-1 p-1 mb-5 rounded-full" style="background: var(--bg-tertiary);">
+                <button @click="addTrackMode = 'collection'" class="flex-1 px-4 py-2 rounded-full text-sm font-medium transition-colors" :style="addTrackMode === 'collection' ? 'background: var(--accent); color: #fff;' : 'color: var(--text-secondary);'">From collection</button>
+                <button @click="addTrackMode = 'discogs'" class="flex-1 px-4 py-2 rounded-full text-sm font-medium transition-colors" :style="addTrackMode === 'discogs' ? 'background: var(--accent); color: #fff;' : 'color: var(--text-secondary);'">From Discogs</button>
               </div>
 
-              <div v-if="isSearchingTracks" class="text-center py-8">
-                <div class="w-8 h-8 border-2 rounded-full animate-spin mx-auto" style="border-color: var(--accent); border-top-color: transparent;"></div>
-              </div>
-
-              <div v-else-if="availableTracks.length === 0" class="text-center py-8">
-                <p class="mb-4" style="color: var(--text-secondary);">No tracks found in your collection</p>
-                <button @click="addTrackMode = 'discogs'" class="btn-primary !py-2 !px-4 text-sm">Search Discogs</button>
-              </div>
-
-              <div v-else class="space-y-1 max-h-96 overflow-y-auto">
-                <div v-for="track in availableTracks" :key="track.id" class="flex items-center gap-3 p-2.5 rounded-xl transition-colors hover:bg-white/[0.04]">
-                  <img v-if="track.userRecord?.release?.thumbUrl" :src="track.userRecord.release.thumbUrl" :alt="`${track.title} cover`" class="w-12 h-12 rounded-lg object-cover cursor-pointer" @click="addTrackToSetlist(track)" />
-                  <div v-else class="w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0 cursor-pointer" style="background: var(--bg-tertiary);" @click="addTrackToSetlist(track)">
-                    <svg class="w-6 h-6" style="color: var(--text-tertiary);" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" /></svg>
-                  </div>
-                  <div class="flex-1 min-w-0 cursor-pointer" @click="addTrackToSetlist(track)">
-                    <h4 class="font-medium truncate text-sm" style="color: var(--text-primary);">{{ track.title }}</h4>
-                    <p class="text-xs truncate" style="color: var(--text-secondary);">{{ track.artist }}</p>
-                  </div>
-                  <div v-if="track.bpm" class="text-xs font-mono" style="color: var(--text-tertiary);">{{ track.bpm }} BPM</div>
-                  <a :href="getYoutubeSearchUrl(track.artist, track.title)" target="_blank" rel="noopener noreferrer" class="icon-danger p-2 flex-shrink-0" title="Search on YouTube" aria-label="Search on YouTube" @click.stop>
-                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
-                  </a>
+              <!-- Collection: pick a record -->
+              <div v-if="addTrackMode === 'collection'">
+                <div class="mb-4">
+                  <input v-model="recordSearchQuery" type="text" placeholder="Search your collection…" class="input w-full px-4 py-2.5" @input="searchRecords" />
                 </div>
-              </div>
-            </div>
 
-            <!-- Discogs Search Mode -->
-            <div v-else-if="addTrackMode === 'discogs'">
-              <div class="mb-4">
-                <input v-model="discogsSearchQuery" type="text" placeholder="Search Discogs…" class="input w-full px-4 py-2.5" />
-              </div>
+                <div v-if="isSearchingRecords" class="text-center py-8">
+                  <div class="w-8 h-8 border-2 rounded-full animate-spin mx-auto" style="border-color: var(--accent); border-top-color: transparent;"></div>
+                </div>
 
-              <div v-if="isSearchingDiscogs" class="text-center py-8">
-                <div class="w-8 h-8 border-2 rounded-full animate-spin mx-auto" style="border-color: var(--accent); border-top-color: transparent;"></div>
-                <p class="text-sm mt-2" style="color: var(--text-secondary);">Searching Discogs…</p>
-              </div>
+                <div v-else-if="availableRecords.length === 0" class="text-center py-8">
+                  <p class="mb-4" style="color: var(--text-secondary);">No records found in your collection</p>
+                  <button @click="addTrackMode = 'discogs'" class="btn-primary !py-2 !px-4 text-sm">Search Discogs</button>
+                </div>
 
-              <div v-else-if="discogsSearchResults.length > 0" class="space-y-2 max-h-96 overflow-y-auto">
-                <div v-for="result in discogsSearchResults" :key="result.id" class="surface-2 overflow-hidden">
-                  <div class="p-3 flex gap-3">
-                    <div class="w-16 h-16 flex-shrink-0 rounded-lg overflow-hidden" style="background: var(--bg-secondary);">
-                      <img v-if="result.cover_image || result.thumb" :src="result.thumb || result.cover_image" :alt="result.title" class="w-full h-full object-cover" />
+                <div v-else class="space-y-1 max-h-96 overflow-y-auto">
+                  <button v-for="record in availableRecords" :key="record.id" type="button" class="w-full flex items-center gap-3 p-2.5 rounded-xl transition-colors hover:bg-white/[0.04] text-left" @click="selectCollectionRecord(record)">
+                    <img v-if="record.release?.thumbUrl" :src="record.release.thumbUrl" :alt="`${record.release.title} cover`" class="w-12 h-12 rounded-lg object-cover flex-shrink-0" />
+                    <div v-else class="w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0" style="background: var(--bg-tertiary);">
+                      <svg class="w-6 h-6" style="color: var(--text-tertiary);" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" /></svg>
                     </div>
                     <div class="flex-1 min-w-0">
-                      <h4 class="font-medium text-sm truncate" style="color: var(--text-primary);">{{ result.title }}</h4>
-                      <p class="text-xs" style="color: var(--text-secondary);">{{ result.year || 'Year unknown' }}</p>
-                      <p v-if="result.format?.length" class="text-xs mt-1" style="color: var(--accent);">{{ result.format.join(', ') }}</p>
+                      <h4 class="font-medium truncate text-sm" style="color: var(--text-primary);">{{ record.release?.title }}</h4>
+                      <p class="text-xs truncate" style="color: var(--text-secondary);">{{ record.release?.artist }}</p>
                     </div>
-                    <button @click="addRecordFromDiscogs(result.id)" :disabled="isAddingRecord && addingDiscogsId === result.id" class="btn-primary !py-1.5 !px-4 text-sm flex-shrink-0 self-center">
-                      {{ isAddingRecord && addingDiscogsId === result.id ? 'Adding…' : 'Add' }}
-                    </button>
-                  </div>
+                    <svg class="w-5 h-5 flex-shrink-0" style="color: var(--text-tertiary);" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5l7 7-7 7" /></svg>
+                  </button>
                 </div>
               </div>
 
-              <div v-else-if="discogsSearchQuery && !isSearchingDiscogs" class="text-center py-8">
-                <p style="color: var(--text-secondary);">No results found on Discogs</p>
+              <!-- Discogs: pick a record -->
+              <div v-else-if="addTrackMode === 'discogs'">
+                <div class="mb-4">
+                  <input v-model="discogsSearchQuery" type="text" placeholder="Search Discogs…" class="input w-full px-4 py-2.5" />
+                </div>
+
+                <div v-if="isSearchingDiscogs" class="text-center py-8">
+                  <div class="w-8 h-8 border-2 rounded-full animate-spin mx-auto" style="border-color: var(--accent); border-top-color: transparent;"></div>
+                  <p class="text-sm mt-2" style="color: var(--text-secondary);">Searching Discogs…</p>
+                </div>
+
+                <div v-else-if="discogsSearchResults.length > 0" class="space-y-2 max-h-96 overflow-y-auto">
+                  <div v-for="result in discogsSearchResults" :key="result.id" class="surface-2 overflow-hidden">
+                    <div class="p-3 flex gap-3">
+                      <div class="w-16 h-16 flex-shrink-0 rounded-lg overflow-hidden" style="background: var(--bg-secondary);">
+                        <img v-if="result.cover_image || result.thumb" :src="result.thumb || result.cover_image" :alt="result.title" class="w-full h-full object-cover" />
+                      </div>
+                      <div class="flex-1 min-w-0">
+                        <h4 class="font-medium text-sm truncate" style="color: var(--text-primary);">{{ result.title }}</h4>
+                        <p class="text-xs" style="color: var(--text-secondary);">{{ result.year || 'Year unknown' }}</p>
+                        <p v-if="result.format?.length" class="text-xs mt-1" style="color: var(--accent);">{{ result.format.join(', ') }}</p>
+                      </div>
+                      <button @click="selectDiscogsRecord(result.id)" :disabled="isAddingRecord && addingDiscogsId === result.id" class="btn-primary !py-1.5 !px-4 text-sm flex-shrink-0 self-center">
+                        {{ isAddingRecord && addingDiscogsId === result.id ? 'Loading…' : 'Select' }}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div v-else-if="discogsSearchQuery && !isSearchingDiscogs" class="text-center py-8">
+                  <p style="color: var(--text-secondary);">No results found on Discogs</p>
+                </div>
+
+                <div v-else class="text-center py-8">
+                  <p style="color: var(--text-secondary);">Search Discogs to add a new record</p>
+                </div>
               </div>
 
-              <div v-else class="text-center py-8">
-                <p style="color: var(--text-secondary);">Search Discogs to add a new record</p>
+              <div class="flex justify-end mt-5">
+                <button @click="closeAddTrackModal" class="btn-secondary">Cancel</button>
               </div>
-            </div>
+            </template>
 
-            <div class="flex justify-end mt-5">
-              <button @click="showAddTrackModal = false" class="btn-secondary">Cancel</button>
-            </div>
+            <!-- STEP 2: pick tracks from the selected record -->
+            <template v-else>
+              <div class="flex items-center gap-3 mb-5">
+                <button type="button" class="icon-btn p-2 -ml-2" title="Back" aria-label="Back to search" @click="backToRecordSearch">
+                  <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 19l-7-7 7-7" /></svg>
+                </button>
+                <div class="min-w-0">
+                  <h2 class="display text-2xl truncate">{{ selectedRecord?.release?.title || 'Select tracks' }}</h2>
+                  <p class="text-sm truncate" style="color: var(--text-secondary);">{{ selectedRecord?.release?.artist }}</p>
+                </div>
+              </div>
+
+              <div v-if="isLoadingRecordTracks" class="text-center py-8">
+                <div class="w-8 h-8 border-2 rounded-full animate-spin mx-auto" style="border-color: var(--accent); border-top-color: transparent;"></div>
+                <p class="text-sm mt-2" style="color: var(--text-secondary);">Loading tracks…</p>
+              </div>
+
+              <div v-else-if="recordTracks.length === 0" class="text-center py-8">
+                <p style="color: var(--text-secondary);">No tracks found for this record</p>
+              </div>
+
+              <template v-else>
+                <div class="flex items-center justify-between mb-2 px-1">
+                  <button type="button" class="text-sm font-medium" style="color: var(--accent);" @click="toggleSelectAllTracks">
+                    {{ allSelectableSelected ? 'Deselect all' : 'Select all' }}
+                  </button>
+                  <span class="text-xs" style="color: var(--text-tertiary);">{{ selectedTrackIds.size }} selected</span>
+                </div>
+
+                <div class="space-y-1 max-h-80 overflow-y-auto">
+                  <label v-for="track in recordTracks" :key="track.id" class="flex items-center gap-3 p-2.5 rounded-xl transition-colors" :class="trackAlreadyInSetlist(track.id) ? 'opacity-50' : 'cursor-pointer hover:bg-white/[0.04]'">
+                    <input
+                      type="checkbox"
+                      class="w-4 h-4 flex-shrink-0 accent-[color:var(--accent)]"
+                      :checked="selectedTrackIds.has(track.id)"
+                      :disabled="trackAlreadyInSetlist(track.id)"
+                      @change="toggleTrackSelection(track.id)"
+                    />
+                    <span class="text-xs font-mono w-6 flex-shrink-0 text-center" style="color: var(--text-tertiary);">{{ track.position || '–' }}</span>
+                    <div class="flex-1 min-w-0">
+                      <h4 class="font-medium truncate text-sm" style="color: var(--text-primary);">{{ track.title }}</h4>
+                      <p v-if="trackAlreadyInSetlist(track.id)" class="text-xs" style="color: var(--text-tertiary);">Already in setlist</p>
+                    </div>
+                    <div v-if="track.bpm" class="text-xs font-mono flex-shrink-0" style="color: var(--text-tertiary);">{{ track.bpm }} BPM</div>
+                    <a :href="getYoutubeSearchUrl(selectedRecord?.release?.artist || '', track.title)" target="_blank" rel="noopener noreferrer" class="icon-danger p-2 flex-shrink-0" title="Search on YouTube" aria-label="Search on YouTube" @click.stop>
+                      <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </a>
+                  </label>
+                </div>
+              </template>
+
+              <div class="flex justify-end gap-2 mt-5">
+                <button @click="backToRecordSearch" class="btn-secondary">Back</button>
+                <button @click="addSelectedTracks" :disabled="selectedTrackIds.size === 0 || isAddingTracks" class="btn-primary">
+                  {{ isAddingTracks ? 'Adding…' : `Add ${selectedTrackIds.size || ''} track${selectedTrackIds.size === 1 ? '' : 's'} to list` }}
+                </button>
+              </div>
+            </template>
+
           </div>
         </div>
       </div>
@@ -576,17 +637,44 @@ const showRemoveModal = ref(false)
 const showEditModal = ref(false)
 const showTagFilterModal = ref(false)
 
-const availableTracks = ref<Track[]>([])
-const isSearchingTracks = ref(false)
-const trackSearchQuery = ref('')
-
-// Discogs search for adding records
+// Add-track flow: step 1 = pick a record, step 2 = pick tracks from it
+const addTrackStep = ref<'search' | 'tracks'>('search')
 const addTrackMode = ref<'collection' | 'discogs'>('collection')
+
+// Collection record search (step 1)
+const recordSearchQuery = ref('')
+const availableRecords = ref<any[]>([])
+const isSearchingRecords = ref(false)
+
+// Discogs search for adding records (step 1)
 const discogsSearchQuery = ref('')
 const discogsSearchResults = ref<any[]>([])
 const isSearchingDiscogs = ref(false)
 const isAddingRecord = ref(false)
 const addingDiscogsId = ref<number | null>(null)
+
+// Selected record + track multi-select (step 2)
+const selectedRecord = ref<any | null>(null)
+const recordTracks = ref<Track[]>([])
+const isLoadingRecordTracks = ref(false)
+const selectedTrackIds = ref<Set<string>>(new Set())
+const isAddingTracks = ref(false)
+
+// Track IDs already present in the current setlist (to disable re-adding)
+const setlistTrackIds = computed(
+  () => new Set((setlist.value?.tracks || []).map((t) => t.trackId))
+)
+function trackAlreadyInSetlist(trackId: string) {
+  return setlistTrackIds.value.has(trackId)
+}
+const selectableRecordTracks = computed(
+  () => recordTracks.value.filter((t) => !trackAlreadyInSetlist(t.id))
+)
+const allSelectableSelected = computed(
+  () =>
+    selectableRecordTracks.value.length > 0 &&
+    selectedTrackIds.value.size === selectableRecordTracks.value.length
+)
 
 const selectedTrack = ref<SetlistTrack | null>(null)
 const manualBpm = ref<number | null>(null)
@@ -730,45 +818,110 @@ async function fetchSetlist() {
 
 let searchTimeout: NodeJS.Timeout | null = null
 
-async function searchTracks() {
+// Step 1 (collection): search records in the user's collection
+async function searchRecords() {
   if (searchTimeout) clearTimeout(searchTimeout)
 
   searchTimeout = setTimeout(async () => {
-    isSearchingTracks.value = true
+    isSearchingRecords.value = true
     try {
       const params = new URLSearchParams()
-      if (trackSearchQuery.value.trim()) {
-        params.append('search', trackSearchQuery.value.trim())
+      if (recordSearchQuery.value.trim()) {
+        params.append('search', recordSearchQuery.value.trim())
       }
       params.append('limit', '50')
 
-      const response = await $fetch(`/api/tracks?${params}`)
-      availableTracks.value = response.tracks
+      const response = await $fetch<{ records: any[] }>(`/api/records?${params}`)
+      availableRecords.value = response.records
     } catch (error) {
-      console.error('Failed to search tracks:', error)
+      console.error('Failed to search records:', error)
     } finally {
-      isSearchingTracks.value = false
+      isSearchingRecords.value = false
     }
   }, 300)
 }
 
-async function addTrackToSetlist(track: Track) {
+function openAddTrackModal() {
+  resetAddTrackFlow()
+  showAddTrackModal.value = true
+  if (availableRecords.value.length === 0) searchRecords()
+}
+
+function resetAddTrackFlow() {
+  addTrackStep.value = 'search'
+  selectedRecord.value = null
+  recordTracks.value = []
+  selectedTrackIds.value = new Set()
+}
+
+function closeAddTrackModal() {
+  showAddTrackModal.value = false
+  resetAddTrackFlow()
+}
+
+function backToRecordSearch() {
+  addTrackStep.value = 'search'
+  selectedRecord.value = null
+  recordTracks.value = []
+  selectedTrackIds.value = new Set()
+}
+
+// Step 2: load a record's tracks and move to track-selection
+async function loadRecordTracks(record: any) {
+  selectedRecord.value = record
+  selectedTrackIds.value = new Set()
+  recordTracks.value = []
+  addTrackStep.value = 'tracks'
+  isLoadingRecordTracks.value = true
   try {
-    await $fetch(`/api/setlists/${setlist.value!.id}/tracks/add`, {
+    const response = await $fetch<{ record: any }>(`/api/records/${record.id}`)
+    recordTracks.value = response.record?.tracks || []
+  } catch (error) {
+    console.error('Failed to load record tracks:', error)
+    alert('Failed to load tracks for this record')
+  } finally {
+    isLoadingRecordTracks.value = false
+  }
+}
+
+function selectCollectionRecord(record: any) {
+  loadRecordTracks(record)
+}
+
+function toggleTrackSelection(trackId: string) {
+  if (trackAlreadyInSetlist(trackId)) return
+  const next = new Set(selectedTrackIds.value)
+  if (next.has(trackId)) next.delete(trackId)
+  else next.add(trackId)
+  selectedTrackIds.value = next
+}
+
+function toggleSelectAllTracks() {
+  if (allSelectableSelected.value) {
+    selectedTrackIds.value = new Set()
+  } else {
+    selectedTrackIds.value = new Set(selectableRecordTracks.value.map((t) => t.id))
+  }
+}
+
+async function addSelectedTracks() {
+  const trackIds = Array.from(selectedTrackIds.value)
+  if (trackIds.length === 0) return
+
+  isAddingTracks.value = true
+  try {
+    await $fetch(`/api/setlists/${setlist.value!.id}/tracks/add-batch`, {
       method: 'POST',
-      body: { trackId: track.id }
+      body: { trackIds }
     })
 
     await fetchSetlist()
-    showAddTrackModal.value = false
-    trackSearchQuery.value = ''
+    closeAddTrackModal()
   } catch (error: any) {
-    console.error('Failed to add track:', error)
-    if (error.statusCode === 400) {
-      alert('This track is already in the setlist')
-    } else {
-      alert('Failed to add track')
-    }
+    console.error('Failed to add tracks:', error)
+    alert('Failed to add tracks to setlist')
+  } finally {
+    isAddingTracks.value = false
   }
 }
 
@@ -1077,7 +1230,9 @@ async function searchDiscogs() {
   }
 }
 
-async function addRecordFromDiscogs(discogsId: number) {
+// Step 1 (discogs): add the record to the collection, then jump to its
+// (now server-side synced) tracks for multi-select — same step 2 as collection.
+async function selectDiscogsRecord(discogsId: number) {
   isAddingRecord.value = true
   addingDiscogsId.value = discogsId
 
@@ -1087,14 +1242,9 @@ async function addRecordFromDiscogs(discogsId: number) {
       body: { discogsId }
     })
 
-    // Flip to collection mode, pre-filtered to the record we just added so its
-    // (now server-side synced) tracks are immediately visible and addable.
-    addTrackMode.value = 'collection'
-    discogsSearchQuery.value = ''
-    discogsSearchResults.value = []
-    const rel = response.record?.release
-    trackSearchQuery.value = rel?.artist || rel?.title || ''
-    await searchTracks()
+    // Refresh the collection list in the background so it's current next time.
+    availableRecords.value = []
+    await loadRecordTracks(response.record)
   } catch (error: any) {
     console.error('Failed to add record:', error)
     alert(error.data?.message || 'Failed to add record')
@@ -1115,7 +1265,7 @@ function formatDate(dateString: string) {
 
 onMounted(async () => {
   await fetchSetlist()
-  await searchTracks()
+  await searchRecords()
 
   // Auto-open edit modal if needed
   if (showEditModal.value && setlist.value) {
