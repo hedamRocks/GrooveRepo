@@ -247,8 +247,9 @@ function calculateBPMScore(params: {
  */
 export async function getLibraryMedianBPM(): Promise<number | undefined> {
   try {
-    // Fetch all analyzed BPMs from database
-    const allBPMs = await prisma.analysisCache.findMany({
+    // Fetch all analyzed BPMs from database (analyzed tracks store bpm directly)
+    const allBPMs = await prisma.track.findMany({
+      where: { bpm: { not: null } },
       select: { bpm: true }
     })
 
@@ -257,7 +258,9 @@ export async function getLibraryMedianBPM(): Promise<number | undefined> {
     }
 
     // Calculate median
-    const sorted = allBPMs.map(r => r.bpm).sort((a, b) => a - b)
+    const sorted = allBPMs
+      .map(r => r.bpm as number)
+      .sort((a, b) => a - b)
     const mid = Math.floor(sorted.length / 2)
 
     return sorted.length % 2 === 0
