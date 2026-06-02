@@ -27,10 +27,11 @@ export default defineEventHandler(async (event) => {
 
     // Parse request body
     const body = await readBody(event)
-    const { recordIds, trackIds, analyzeAll } = body as {
+    const { recordIds, trackIds, analyzeAll, force } = body as {
       recordIds?: string[]
       trackIds?: string[]
       analyzeAll?: boolean
+      force?: boolean // re-analyze even tracks that already have a BPM
     }
 
     // Note: the YouTube API key lives on the worker, not here — this endpoint
@@ -57,16 +58,26 @@ export default defineEventHandler(async (event) => {
     let jobType: string
 
     if (trackIds && trackIds.length > 0) {
-      // Analyze specific tracks (NEW)
-      targetTrackIds = trackIds
+      // Analyze specific tracks. Skip ones that already have a BPM (saves
+      // YouTube API requests) unless `force` is set for explicit re-analysis.
+      if (force) {
+        targetTrackIds = trackIds
+      } else {
+        const tracks = await prisma.track.findMany({
+          where: { id: { in: trackIds }, bpm: null },
+          select: { id: true }
+        })
+        targetTrackIds = tracks.map(t => t.id)
+      }
       jobType = 'selected_tracks'
-      console.log(`[Analysis Start] Creating job for ${targetTrackIds.length} tracks`)
+      console.log(`[Analysis Start] Creating job for ${targetTrackIds.length} tracks (of ${trackIds.length} requested)`)
     } else if (recordIds && recordIds.length > 0) {
-      // Analyze all tracks from specific records (including re-analysis)
+      // Analyze all tracks from specific records. Skip already-analyzed tracks
+      // (BPM set) unless `force` is set.
       const tracks = await prisma.track.findMany({
         where: {
-          userRecordId: { in: recordIds }
-          // Removed bpm: null filter to allow re-analysis
+          userRecordId: { in: recordIds },
+          ...(force ? {} : { bpm: null })
         },
         select: { id: true }
       })
@@ -100,7 +111,9 @@ export default defineEventHandler(async (event) => {
     if (targetTrackIds.length === 0) {
       throw createError({
         statusCode: 400,
-        message: 'No tracks to analyze'
+        message: force
+          ? 'No tracks to analyze'
+          : 'All selected tracks are already analyzed'
       })
     }
 

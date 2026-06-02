@@ -169,8 +169,10 @@ async function analyzeAllTracks() {
 }
 
 async function analyzeSingleTrack(trackId: string) {
+  // Explicit per-track (re-)analysis — force, so a track that already has a
+  // BPM still gets re-run.
   analyzingTrackId.value = trackId
-  await startAnalysis({ trackIds: [trackId] })
+  await startAnalysis({ trackIds: [trackId], force: true })
 }
 
 onMounted(() => {
