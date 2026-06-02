@@ -91,6 +91,23 @@
             </svg>
           </div>
 
+          <!-- BPM Filter -->
+          <div class="relative flex-shrink-0 flex items-center gap-1.5">
+            <input
+              v-model.number="bpmFilter"
+              type="number"
+              min="0"
+              inputmode="numeric"
+              placeholder="BPM"
+              aria-label="Filter by BPM (±2)"
+              class="input w-[4.5rem] pl-3 pr-2 py-2 text-xs !rounded-full"
+              :class="bpmFilter ? 'ring-1 ring-[var(--accent)]' : ''"
+            />
+            <span v-if="bpmFilter" class="text-[11px] whitespace-nowrap" style="color: var(--text-tertiary);">
+              {{ bpmFilter - BPM_FILTER_TOLERANCE }}–{{ bpmFilter + BPM_FILTER_TOLERANCE }}
+            </span>
+          </div>
+
           <!-- Tag Filter Button -->
           <button @click="showTagFilterModal = true" class="chip flex-shrink-0 !py-2" :class="selectedTagIds.length ? 'chip-active' : ''">
             <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -106,7 +123,7 @@
           </div>
 
           <!-- Clear Filters -->
-          <button v-if="selectedCountry || selectedTagIds.length > 0" @click="clearFilters" class="btn-ghost flex-shrink-0 text-xs">Clear</button>
+          <button v-if="selectedCountry || selectedTagIds.length > 0 || bpmFilter" @click="clearFilters" class="btn-ghost flex-shrink-0 text-xs">Clear</button>
         </div>
 
         <div v-if="filteredTracks.length !== setlist.tracks.length" class="text-xs" style="color: var(--text-tertiary);">
@@ -128,9 +145,14 @@
 
       <!-- Tracks List -->
       <div v-else class="pb-28 space-y-2.5">
+        <template v-for="(setlistTrack, index) in displayTracks" :key="setlistTrack.id">
+          <!-- BPM-filter divider: tracks above are slower, below are faster -->
+          <div v-if="index === separatorIndex" class="flex items-center gap-2 py-0.5 select-none">
+            <div class="flex-1 h-px" style="background: var(--border-subtle);"></div>
+            <span class="text-[11px] font-mono px-2 py-0.5 rounded-full" style="color: var(--accent); border: 1px solid var(--border-subtle);">{{ bpmFilter }} BPM</span>
+            <div class="flex-1 h-px" style="background: var(--border-subtle);"></div>
+          </div>
         <div
-          v-for="(setlistTrack, index) in filteredTracks"
-          :key="setlistTrack.id"
           class="group relative surface glass-hover overflow-hidden"
         >
           <div class="flex gap-3 p-3">
@@ -226,6 +248,7 @@
             </div>
           </div>
         </div>
+        </template>
       </div>
 
       <!-- Fixed Add Track Button -->
@@ -697,6 +720,10 @@ const selectedCountry = ref<string>('')
 const selectedTagIds = ref<string[]>([])
 const tagFilterOperator = ref<'AND' | 'OR'>('OR')
 
+// BPM filter: show tracks within ±tolerance of the typed BPM
+const bpmFilter = ref<number | null>(null)
+const BPM_FILTER_TOLERANCE = 2
+
 // Tag management
 const showTagManagementModal = ref(false)
 const selectedTrackForTags = ref<Track | null>(null)
@@ -785,6 +812,15 @@ const filteredTracks = computed(() => {
     )
   }
 
+  // Filter by BPM (±tolerance), using the effective BPM (manual override wins)
+  if (bpmFilter.value && bpmFilter.value > 0) {
+    const target = bpmFilter.value
+    tracks = tracks.filter(track => {
+      const bpm = track.manualBpm || track.track.bpm
+      return bpm != null && Math.abs(bpm - target) <= BPM_FILTER_TOLERANCE
+    })
+  }
+
   // Filter by tags
   if (selectedTagIds.value.length > 0) {
     tracks = tracks.filter(track => {
@@ -801,6 +837,29 @@ const filteredTracks = computed(() => {
   }
 
   return tracks
+})
+
+// Effective BPM for a setlist track (manual override wins over analyzed value)
+function effectiveBpm(st: SetlistTrack): number {
+  return st.manualBpm || st.track.bpm || 0
+}
+
+// When the BPM filter is active, order slow → fast so the "below" and
+// "at/higher" groups are contiguous and a single divider separates them.
+const displayTracks = computed(() => {
+  if (bpmFilter.value && bpmFilter.value > 0) {
+    return [...filteredTracks.value].sort((a, b) => effectiveBpm(a) - effectiveBpm(b))
+  }
+  return filteredTracks.value
+})
+
+// Index of the first track at or above the target BPM — where the divider goes.
+// Returns -1 when no filter is set or when every track is on one side.
+const separatorIndex = computed(() => {
+  if (!bpmFilter.value || !(bpmFilter.value > 0)) return -1
+  const target = bpmFilter.value
+  const idx = displayTracks.value.findIndex(st => effectiveBpm(st) >= target)
+  return idx <= 0 ? -1 : idx
 })
 
 async function fetchSetlist() {
@@ -1007,6 +1066,7 @@ async function removeTrack() {
 function clearFilters() {
   selectedCountry.value = ''
   selectedTagIds.value = []
+  bpmFilter.value = null
 }
 
 function toggleTagFilter(tagId: string) {
