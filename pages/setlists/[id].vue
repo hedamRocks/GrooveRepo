@@ -875,7 +875,15 @@ async function loadRecordTracks(record: any) {
   isLoadingRecordTracks.value = true
   try {
     const response = await $fetch<{ record: any }>(`/api/records/${record.id}`)
-    recordTracks.value = response.record?.tracks || []
+    const tracks = response.record?.tracks || []
+    recordTracks.value = tracks
+    // Pre-select tracks that already live in another setlist (but aren't in
+    // this one — those stay disabled). Lets you mirror an existing selection fast.
+    selectedTrackIds.value = new Set(
+      tracks
+        .filter((t: any) => (t._count?.setlistTracks ?? 0) > 0 && !trackAlreadyInSetlist(t.id))
+        .map((t: any) => t.id)
+    )
   } catch (error) {
     console.error('Failed to load record tracks:', error)
     alert('Failed to load tracks for this record')

@@ -46,6 +46,13 @@ export default defineEventHandler(async (event) => {
         tracks: {
           orderBy: {
             position: 'asc'
+          },
+          include: {
+            // How many setlists each track is already part of — used by the
+            // add-to-setlist flow to pre-select tracks used elsewhere.
+            _count: {
+              select: { setlistTracks: true }
+            }
           }
         }
       }
