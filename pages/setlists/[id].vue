@@ -146,10 +146,10 @@
       <!-- Tracks List -->
       <div v-else class="pb-28 space-y-2.5">
         <template v-for="(setlistTrack, index) in displayTracks" :key="setlistTrack.id">
-          <!-- BPM-filter divider: tracks above are slower, below are faster -->
-          <div v-if="index === separatorIndex" class="flex items-center gap-2 py-0.5 select-none">
+          <!-- BPM-filter section headers: turn down / on-beat / turn up -->
+          <div v-if="bpmDividers[index]" class="flex items-center gap-2 py-0.5 select-none">
             <div class="flex-1 h-px" style="background: var(--border-subtle);"></div>
-            <span class="text-[11px] font-mono px-2 py-0.5 rounded-full" style="color: var(--accent); border: 1px solid var(--border-subtle);">{{ bpmFilter }} BPM</span>
+            <span class="text-[11px] font-mono px-2 py-0.5 rounded-full whitespace-nowrap" style="color: var(--accent); border: 1px solid var(--border-subtle);">{{ bpmDividers[index] }}</span>
             <div class="flex-1 h-px" style="background: var(--border-subtle);"></div>
           </div>
         <div
@@ -853,13 +853,21 @@ const displayTracks = computed(() => {
   return filteredTracks.value
 })
 
-// Index of the first track at or above the target BPM — where the divider goes.
-// Returns -1 when no filter is set or when every track is on one side.
-const separatorIndex = computed(() => {
-  if (!bpmFilter.value || !(bpmFilter.value > 0)) return -1
+// Divider labels keyed by the display-row index they appear *before*.
+// With slow→fast ordering this yields up to three section headers:
+//   ▼ turn down (slower than target) · {target} BPM (on beat) · ▲ turn up (faster)
+const bpmDividers = computed<Record<number, string>>(() => {
+  const map: Record<number, string> = {}
+  if (!bpmFilter.value || !(bpmFilter.value > 0)) return map
   const target = bpmFilter.value
-  const idx = displayTracks.value.findIndex(st => effectiveBpm(st) >= target)
-  return idx <= 0 ? -1 : idx
+  const tracks = displayTracks.value
+  const belowStart = tracks.findIndex(st => effectiveBpm(st) < target)
+  const exactStart = tracks.findIndex(st => effectiveBpm(st) === target)
+  const aboveStart = tracks.findIndex(st => effectiveBpm(st) > target)
+  if (belowStart !== -1) map[belowStart] = '▼ turn down'
+  if (exactStart !== -1) map[exactStart] = `${target} BPM`
+  if (aboveStart !== -1) map[aboveStart] = '▲ turn up'
+  return map
 })
 
 async function fetchSetlist() {
