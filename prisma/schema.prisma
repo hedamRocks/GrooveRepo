@@ -198,6 +198,11 @@ model Track {
   youtubeId    String?
   youtubeTitle String?
 
+  // R2 audio cache (for the dual-deck player). The worker downloads + uploads
+  // the MP3 to R2 and flips audioReady; the app then redirects to it.
+  audioReady       Boolean   @default(false)
+  audioRequestedAt DateTime?
+
   // Timestamps
   analyzedAt DateTime?
   createdAt  DateTime  @default(now())

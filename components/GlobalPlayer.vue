@@ -22,8 +22,9 @@
                   <div v-else class="w-full h-full flex items-center justify-center" style="background: var(--bg-tertiary);">
                     <svg class="w-10 h-10" style="color: var(--text-tertiary);" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" /></svg>
                   </div>
-                  <div v-if="loadingA" class="absolute inset-0 flex items-center justify-center bg-black/55">
+                  <div v-if="loadingA" class="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/55">
                     <div class="w-7 h-7 border-2 rounded-full animate-spin" style="border-color: var(--accent); border-top-color: transparent;"></div>
+                    <span v-if="preparingA" class="text-[10px] uppercase tracking-wider" style="color: var(--text-secondary);">Preparing…</span>
                   </div>
                   <div v-else-if="errorA" class="absolute inset-0 flex items-center justify-center bg-black/75 p-3 text-center text-xs" style="color: #ff6b6b;">{{ errorA }}</div>
                 </div>
@@ -46,8 +47,9 @@
                   <div v-else class="w-full h-full flex items-center justify-center" style="background: var(--bg-tertiary);">
                     <svg class="w-10 h-10" style="color: var(--text-tertiary);" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" /></svg>
                   </div>
-                  <div v-if="loadingB" class="absolute inset-0 flex items-center justify-center bg-black/55">
+                  <div v-if="loadingB" class="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/55">
                     <div class="w-7 h-7 border-2 rounded-full animate-spin" style="border-color: var(--accent); border-top-color: transparent;"></div>
+                    <span v-if="preparingB" class="text-[10px] uppercase tracking-wider" style="color: var(--text-secondary);">Preparing…</span>
                   </div>
                   <div v-else-if="errorB" class="absolute inset-0 flex items-center justify-center bg-black/75 p-3 text-center text-xs" style="color: #ff6b6b;">{{ errorB }}</div>
                 </div>
@@ -175,6 +177,8 @@ const loadingA = ref(false); const loadingB = ref(false)
 const errorA = ref<string | null>(null); const errorB = ref<string | null>(null)
 const seekingA = ref(false); const seekingB = ref(false)
 function seekingRef(d: DeckId) { return d === 'A' ? seekingA : seekingB }
+const preparingA = ref(false); const preparingB = ref(false)
+function preparingRef(d: DeckId) { return d === 'A' ? preparingA : preparingB }
 
 function rateRef(d: DeckId) { return d === 'A' ? rateA : rateB }
 function cueRef(d: DeckId) { return d === 'A' ? cueA : cueB }
@@ -357,10 +361,24 @@ async function loadDeck(d: DeckId, track: DeckTrack) {
 
   try {
     const audio = ensureCtx()
-    const res = await fetch(`/api/audio/${track.trackId}`)
-    if (!res.ok) {
-      const msg = await res.json().then((b) => b?.message).catch(() => null)
-      throw new Error(msg || `Audio unavailable (${res.status})`)
+
+    // The endpoint returns 202 while the worker is still fetching the audio
+    // (R2 mode). Poll until it's ready (or a redirect to the cached file).
+    let res: Response | null = null
+    for (let attempt = 0; attempt < 40; attempt++) {
+      if (myToken !== n.token) return
+      res = await fetch(`/api/audio/${track.trackId}`)
+      if (res.status === 202) {
+        preparingRef(d).value = true
+        await new Promise((r) => setTimeout(r, 3000))
+        continue
+      }
+      break
+    }
+    preparingRef(d).value = false
+    if (!res || !res.ok) {
+      const msg = res ? await res.json().then((b) => b?.message).catch(() => null) : null
+      throw new Error(msg || 'Audio unavailable — is the worker running?')
     }
     const arr = await res.arrayBuffer()
     if (myToken !== n.token) return // superseded by a newer load
@@ -376,6 +394,7 @@ async function loadDeck(d: DeckId, track: DeckTrack) {
   } finally {
     if (myToken === n.token) {
       loadingRef(d).value = false
+      preparingRef(d).value = false
       if (loadingDeck.value === d) loadingDeck.value = null
     }
   }
@@ -389,6 +408,7 @@ function teardown(d: DeckId) {
   nodes[d].cueing = false
   setPlaying(d, false)
   loadingRef(d).value = false
+  preparingRef(d).value = false
   errorRef(d).value = null
   posRef(d).value = 0
   durRef(d).value = 0

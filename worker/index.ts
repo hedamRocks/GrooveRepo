@@ -1,6 +1,8 @@
 import 'dotenv/config'
 import { prisma } from '../server/utils/prisma'
 import { processAnalysisJob } from '../server/utils/analysis-worker'
+import { getCachedAudio } from '../server/utils/audio-cache'
+import { r2Configured, uploadAudioFile, audioKey } from '../server/utils/r2'
 
 /**
  * Tracklib DJ-analysis worker.
@@ -46,6 +48,38 @@ async function claimNextJob(): Promise<ClaimedJob | null> {
   return rows[0] ?? null
 }
 
+/**
+ * Fetch + upload audio for one track the app flagged (R2 mode only).
+ * Returns true if it handled one (so the loop doesn't sleep).
+ */
+async function processOneAudioRequest(): Promise<boolean> {
+  const track = await prisma.track.findFirst({
+    where: { audioRequestedAt: { not: null }, audioReady: false, youtubeId: { not: null } },
+    orderBy: { audioRequestedAt: 'asc' },
+    select: { id: true, youtubeId: true },
+  })
+  if (!track?.youtubeId) return false
+
+  console.log(`[Worker] Fetching audio for track ${track.id} (${track.youtubeId})`)
+  try {
+    const filePath = await getCachedAudio(track.youtubeId)
+    await uploadAudioFile(audioKey(track.youtubeId), filePath)
+    await prisma.track.update({
+      where: { id: track.id },
+      data: { audioReady: true, audioRequestedAt: null },
+    })
+    console.log(`[Worker] Audio ready for ${track.id}`)
+  } catch (e) {
+    console.error(`[Worker] Audio fetch failed for ${track.id}:`, e)
+    // Clear the flag so it doesn't spin; the user can re-trigger by playing again.
+    await prisma.track.update({
+      where: { id: track.id },
+      data: { audioRequestedAt: null },
+    }).catch(() => {})
+  }
+  return true
+}
+
 async function main() {
   if (!YOUTUBE_API_KEY) {
     console.error('[Worker] YOUTUBE_API_KEY is not set — cannot resolve videos. Set it and restart.')
@@ -63,37 +97,49 @@ async function main() {
     console.log(`[Worker] Requeued ${requeued.count} interrupted job(s)`)
   }
 
+  if (r2Configured()) {
+    console.log('[Worker] R2 configured — will fulfil audio cache requests too')
+  }
+
   while (running) {
+    let didWork = false
+
+    // Audio cache requests (R2 mode). Cheap when there's nothing to do.
+    if (r2Configured()) {
+      try {
+        didWork = await processOneAudioRequest()
+      } catch (e) {
+        console.error('[Worker] Audio request error:', e)
+      }
+    }
+
     let job: ClaimedJob | null = null
     try {
       job = await claimNextJob()
     } catch (e) {
       console.error('[Worker] Failed to claim a job:', e)
-      await sleep(POLL_MS)
-      continue
     }
 
-    if (!job) {
-      await sleep(POLL_MS)
-      continue
+    if (job) {
+      didWork = true
+      console.log(`[Worker] Claimed job ${job.id} (${job.trackIds.length} tracks)`)
+      try {
+        await processAnalysisJob({
+          jobId: job.id,
+          userId: job.userId,
+          trackIds: job.trackIds,
+          youtubeApiKey: YOUTUBE_API_KEY,
+        })
+      } catch (e) {
+        // processAnalysisJob marks the job failed on its own; this is a backstop.
+        console.error(`[Worker] Job ${job.id} crashed:`, e)
+        await prisma.analysisJob
+          .update({ where: { id: job.id }, data: { status: 'failed' } })
+          .catch(() => {})
+      }
     }
 
-    console.log(`[Worker] Claimed job ${job.id} (${job.trackIds.length} tracks)`)
-    try {
-      await processAnalysisJob({
-        jobId: job.id,
-        userId: job.userId,
-        trackIds: job.trackIds,
-        youtubeApiKey: YOUTUBE_API_KEY,
-      })
-    } catch (e) {
-      // processAnalysisJob marks the job failed on its own; this is a backstop.
-      console.error(`[Worker] Job ${job.id} crashed:`, e)
-      await prisma.analysisJob
-        .update({ where: { id: job.id }, data: { status: 'failed' } })
-        .catch(() => {})
-    }
-    // No sleep — immediately look for the next job.
+    if (!didWork) await sleep(POLL_MS)
   }
 
   console.log('[Worker] Shutting down…')
