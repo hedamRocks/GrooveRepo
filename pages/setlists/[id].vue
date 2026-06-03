@@ -230,6 +230,17 @@
 
             <!-- Actions -->
             <div class="flex flex-col gap-0.5 flex-shrink-0">
+              <!-- Play on a deck -->
+              <div class="flex gap-0.5">
+                <button @click="playOnDeck('A', toPlayable(setlistTrack))" :disabled="loadingDeck !== null" class="icon-btn px-1.5 py-1 rounded-lg inline-flex items-center gap-0.5 disabled:opacity-40" title="Play on deck A" aria-label="Play on deck A">
+                  <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+                  <span class="text-[10px] font-bold">A</span>
+                </button>
+                <button @click="playOnDeck('B', toPlayable(setlistTrack))" :disabled="loadingDeck !== null" class="icon-btn px-1.5 py-1 rounded-lg inline-flex items-center gap-0.5 disabled:opacity-40" title="Play on deck B" aria-label="Play on deck B">
+                  <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+                  <span class="text-[10px] font-bold">B</span>
+                </button>
+              </div>
               <button @click="openTagModal(setlistTrack.track)" class="icon-btn p-2 rounded-lg" title="Manage tags" aria-label="Manage tags">
                 <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
@@ -588,6 +599,20 @@ import { useRoute, useRouter } from 'vue-router'
 
 const route = useRoute()
 const router = useRouter()
+
+// Global bottom player (dual-deck)
+const { playOnDeck, loadingDeck } = usePlayer()
+
+// Map a setlist track into the player's PlayableTrack shape
+function toPlayable(st: any) {
+  return {
+    id: st.track.id,
+    title: st.track.title,
+    artist: st.track.artist,
+    thumbUrl: st.track.userRecord?.release?.thumbUrl ?? null,
+    bpm: st.manualBpm ?? st.track.bpm ?? null
+  }
+}
 
 interface Track {
   id: string

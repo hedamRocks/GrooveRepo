@@ -4,5 +4,6 @@
     <main class="bg-grain min-h-[calc(100vh-4rem)]">
       <slot />
     </main>
+    <GlobalPlayer />
   </div>
 </template>
