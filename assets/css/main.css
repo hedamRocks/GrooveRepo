@@ -45,6 +45,8 @@
   html {
     scroll-behavior: smooth;
     background: var(--bg-primary);
+    /* App-like: no rubber-band / pull-to-refresh */
+    overscroll-behavior: none;
   }
 
   body {
@@ -55,6 +57,29 @@
     font-weight: 400;
     letter-spacing: -0.011em;
     line-height: 1.6;
+    overscroll-behavior: none;
+    overflow-x: hidden;
+    /* App-like touch behaviour */
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;     /* no iOS long-press menu */
+    touch-action: manipulation;      /* kill double-tap zoom + 300ms delay */
+  }
+
+  /* Re-enable text selection only where it's actually useful */
+  input,
+  textarea,
+  [contenteditable="true"] {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+
+  /* Don't let images be dragged out / long-pressed */
+  img {
+    -webkit-user-drag: none;
+    user-drag: none;
+    -webkit-touch-callout: none;
   }
 
   /* Display headings — geometric, bold, tight */
