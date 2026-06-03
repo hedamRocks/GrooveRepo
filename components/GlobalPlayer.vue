@@ -24,7 +24,7 @@
                     <input type="range" min="0.25" max="2" step="0.05" :value="rateA" @input="setRate('A', Number(($event.target as HTMLInputElement).value))" class="xfader-v h-24 sm:h-28" aria-label="Deck A tempo" />
                     <span class="text-[11px] font-mono" style="color: var(--text-secondary);">{{ rateA.toFixed(2) }}×</span>
                     <span v-if="deckA.bpm" class="text-[11px] font-mono" style="color: var(--accent);">{{ Math.round(deckA.bpm * rateA) }}</span>
-                    <button @click="syncDeck('A')" class="chip !py-0.5 !px-2 !text-[10px]" title="Match deck B's BPM">SYNC</button>
+                    <button @click="syncDeck('A')" class="dj-btn !min-h-[28px] !min-w-0 !text-[10px] w-full" title="Match deck B's BPM">SYNC</button>
                   </div>
                   <!-- Jog-wheel platter -->
                   <div class="flex-1 flex justify-center">
@@ -55,7 +55,7 @@
                     <input type="range" min="0.25" max="2" step="0.05" :value="rateB" @input="setRate('B', Number(($event.target as HTMLInputElement).value))" class="xfader-v h-24 sm:h-28" aria-label="Deck B tempo" />
                     <span class="text-[11px] font-mono" style="color: var(--text-secondary);">{{ rateB.toFixed(2) }}×</span>
                     <span v-if="deckB.bpm" class="text-[11px] font-mono" style="color: var(--accent);">{{ Math.round(deckB.bpm * rateB) }}</span>
-                    <button @click="syncDeck('B')" class="chip !py-0.5 !px-2 !text-[10px]" title="Match deck A's BPM">SYNC</button>
+                    <button @click="syncDeck('B')" class="dj-btn !min-h-[28px] !min-w-0 !text-[10px] w-full" title="Match deck A's BPM">SYNC</button>
                   </div>
                   <div class="flex-1 flex justify-center">
                     <div class="relative w-28 h-28 sm:w-36 sm:h-36 rounded-full overflow-hidden bg-black" style="box-shadow: 0 0 0 1px var(--border-strong), inset 0 0 24px rgba(0,0,0,0.7);">
@@ -96,7 +96,7 @@
         <!-- Deck A controls -->
         <div :class="mobileDeck === 'A' ? 'flex' : 'hidden'" class="items-center gap-2 min-w-0 w-full sm:w-auto sm:flex-1 order-3 sm:order-1 sm:!flex">
           <span class="text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0" :style="deckA ? 'background: var(--accent); color:#fff;' : 'background: var(--bg-tertiary); color: var(--text-tertiary);'">A</span>
-          <button v-if="deckA" @click="togglePlay('A')" class="icon-btn p-2.5 flex-shrink-0" :title="playingA ? 'Pause deck A' : 'Play deck A'" :aria-label="playingA ? 'Pause deck A' : 'Play deck A'">
+          <button v-if="deckA" @click="togglePlay('A')" class="dj-btn flex-shrink-0" :class="playingA ? 'dj-btn-lit' : ''" :title="playingA ? 'Pause deck A' : 'Play deck A'" :aria-label="playingA ? 'Pause deck A' : 'Play deck A'">
             <svg v-if="playingA" class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M6 5h4v14H6zM14 5h4v14h-4z" /></svg>
             <svg v-else class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
           </button>
@@ -104,7 +104,7 @@
             v-if="deckA"
             @mousedown.prevent="startCue('A')" @mouseup="stopCue('A')" @mouseleave="stopCue('A')"
             @touchstart.prevent="startCue('A')" @touchend.prevent="stopCue('A')"
-            class="icon-btn p-2.5 flex-shrink-0" title="Cue — hold to preview from the cue point" aria-label="Cue deck A (hold to preview)"
+            class="dj-btn flex-shrink-0" title="Cue — hold to preview from the cue point" aria-label="Cue deck A (hold to preview)"
           >
             <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none" /></svg>
           </button>
@@ -131,7 +131,7 @@
         <!-- Deck B controls (same DOM order as A; mirrors only on desktop) -->
         <div :class="mobileDeck === 'B' ? 'flex' : 'hidden'" class="items-center gap-2 min-w-0 w-full sm:w-auto sm:flex-1 order-3 sm:order-3 sm:!flex sm:flex-row-reverse sm:justify-end">
           <span class="text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0" :style="deckB ? 'background: var(--accent); color:#fff;' : 'background: var(--bg-tertiary); color: var(--text-tertiary);'">B</span>
-          <button v-if="deckB" @click="togglePlay('B')" class="icon-btn p-2.5 flex-shrink-0" :title="playingB ? 'Pause deck B' : 'Play deck B'" :aria-label="playingB ? 'Pause deck B' : 'Play deck B'">
+          <button v-if="deckB" @click="togglePlay('B')" class="dj-btn flex-shrink-0" :class="playingB ? 'dj-btn-lit' : ''" :title="playingB ? 'Pause deck B' : 'Play deck B'" :aria-label="playingB ? 'Pause deck B' : 'Play deck B'">
             <svg v-if="playingB" class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M6 5h4v14H6zM14 5h4v14h-4z" /></svg>
             <svg v-else class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
           </button>
@@ -139,7 +139,7 @@
             v-if="deckB"
             @mousedown.prevent="startCue('B')" @mouseup="stopCue('B')" @mouseleave="stopCue('B')"
             @touchstart.prevent="startCue('B')" @touchend.prevent="stopCue('B')"
-            class="icon-btn p-2.5 flex-shrink-0" title="Cue — hold to preview from the cue point" aria-label="Cue deck B (hold to preview)"
+            class="dj-btn flex-shrink-0" title="Cue — hold to preview from the cue point" aria-label="Cue deck B (hold to preview)"
           >
             <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none" /></svg>
           </button>
@@ -523,6 +523,36 @@ watch(crossfade, applyVolumes)
 </script>
 
 <style scoped>
+/* Chunky, backlit DJ-controller buttons */
+.dj-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  min-width: 42px;
+  min-height: 38px;
+  padding: 0 0.6rem;
+  border-radius: 9px;
+  background: linear-gradient(180deg, var(--bg-elevated), var(--bg-tertiary));
+  border: 1px solid var(--border-strong);
+  color: var(--text-secondary);
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 2px 4px rgba(0, 0, 0, 0.4);
+  transition: all 0.12s ease;
+  cursor: pointer;
+}
+.dj-btn:hover { color: var(--text-primary); border-color: var(--accent); }
+.dj-btn:active,
+.dj-btn.dj-btn-lit {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+  box-shadow: 0 0 16px var(--accent-glow), 0 0 0 1px var(--accent) inset;
+}
+.dj-btn:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
+
 /* Spinning jog-wheel platter while a deck plays */
 @keyframes platterSpin { to { transform: rotate(360deg); } }
 .platter-spin { animation: platterSpin 3.2s linear infinite; }
