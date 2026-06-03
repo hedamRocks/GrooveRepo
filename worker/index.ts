@@ -16,7 +16,7 @@ import { r2Configured, uploadAudioFile, audioKey } from '../server/utils/r2'
  * Run it: `npm run worker` (locally) or via Docker (see worker/README.md).
  */
 
-const POLL_MS = Number(process.env.WORKER_POLL_MS || 5000)
+const POLL_MS = Number(process.env.WORKER_POLL_MS || 2500)
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY || ''
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))

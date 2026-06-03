@@ -900,12 +900,21 @@ async function fetchSetlist() {
   try {
     const response = await $fetch(`/api/setlists/${route.params.id}`)
     setlist.value = response.setlist
+    prewarmAudio()
   } catch (error) {
     console.error('Failed to fetch setlist:', error)
     router.push('/setlists')
   } finally {
     isLoading.value = false
   }
+}
+
+// Pre-warm the audio cache for this setlist's tracks (fire-and-forget) so the
+// player streams instantly once you hit play. No-op without R2 / the worker.
+function prewarmAudio() {
+  const trackIds = (setlist.value?.tracks || []).map((t) => t.track.id)
+  if (trackIds.length === 0) return
+  $fetch('/api/audio/prepare', { method: 'POST', body: { trackIds } }).catch(() => {})
 }
 
 let searchTimeout: NodeJS.Timeout | null = null

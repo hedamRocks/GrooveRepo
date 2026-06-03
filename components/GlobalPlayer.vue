@@ -463,10 +463,12 @@ function onClose() {
 }
 
 // --- Progress loop ---
-let raf = 0
+// Update ~5×/s (not every animation frame) — a phone chokes on 60fps reactive
+// re-renders of the seek bar + time, and a progress readout doesn't need them.
+let progressTimer: ReturnType<typeof setInterval> | null = null
 function startRaf() {
-  if (raf) return
-  const tick = () => {
+  if (progressTimer) return
+  progressTimer = setInterval(() => {
     let any = false
     ;(['A', 'B'] as DeckId[]).forEach((d) => {
       if ((d === 'A' ? playingA : playingB).value) {
@@ -474,9 +476,8 @@ function startRaf() {
         if (!seekingRef(d).value) posRef(d).value = currentPos(d)
       }
     })
-    raf = any ? requestAnimationFrame(tick) : 0
-  }
-  raf = requestAnimationFrame(tick)
+    if (!any && progressTimer) { clearInterval(progressTimer); progressTimer = null }
+  }, 200)
 }
 
 function fmtTime(sec: number) {
@@ -510,6 +511,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('touchend', unlockAudio)
   window.removeEventListener('click', unlockAudio)
   ro?.disconnect()
+  if (progressTimer) clearInterval(progressTimer)
   document.documentElement.style.setProperty('--player-height', '0px')
 })
 
@@ -553,7 +555,7 @@ watch(crossfade, applyVolumes)
 
 /* Spinning jog-wheel platter while a deck plays */
 @keyframes platterSpin { to { transform: rotate(360deg); } }
-.platter-spin { animation: platterSpin 3.2s linear infinite; }
+.platter-spin { animation: platterSpin 3.2s linear infinite; will-change: transform; transform: translateZ(0); }
 @media (prefers-reduced-motion: reduce) { .platter-spin { animation: none; } }
 
 .xfader {

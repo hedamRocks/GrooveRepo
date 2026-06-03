@@ -66,7 +66,9 @@ function downloadAudio(videoId: string, outPath: string): Promise<string> {
           ...(cookiesPath ? ['--cookies', cookiesPath] : []),
           ...(FFMPEG_DIR ? ['--ffmpeg-location', FFMPEG_DIR] : []),
           '-f', 'bestaudio',
-          '-x', '--audio-format', 'mp3', '--audio-quality', '0',
+          // ~128 kbps MP3 — smaller files download + decode much faster on a
+          // phone, plenty for previewing/mixing.
+          '-x', '--audio-format', 'mp3', '--audio-quality', '5',
           '--no-playlist', '--quiet', '--no-warnings',
           '-o', template,
           url,
