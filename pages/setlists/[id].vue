@@ -263,7 +263,7 @@
       </div>
 
       <!-- Fixed Add Track Button -->
-      <div class="fixed bottom-0 left-0 right-0 z-40 p-4 pointer-events-none" style="background: linear-gradient(to top, #0b0b0c 30%, transparent);">
+      <div class="fixed left-0 right-0 z-40 p-4 pointer-events-none" style="bottom: var(--player-height, 0px); background: linear-gradient(to top, #0b0b0c 30%, transparent);">
         <div class="max-w-5xl mx-auto pointer-events-auto px-2 sm:px-4">
           <button @click="openAddTrackModal" class="btn-primary w-full text-base">
             <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" d="M12 5v14M5 12h14" /></svg>

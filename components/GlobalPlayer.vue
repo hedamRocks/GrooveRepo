@@ -5,7 +5,7 @@
     :style="{ transform: visible ? 'translateY(0)' : 'translateY(120%)' }"
     aria-live="polite"
   >
-    <div class="w-full" style="background: var(--bg-secondary); border-top: 1px solid var(--border-subtle); box-shadow: var(--shadow-lg);">
+    <div ref="barEl" class="w-full" style="background: var(--bg-secondary); border-top: 1px solid var(--border-subtle); box-shadow: var(--shadow-lg);">
 
       <!-- Stage (artwork + seek + tempo). Clipped to 0 height when collapsed. -->
       <div class="overflow-hidden transition-all duration-300" :class="expanded ? 'pt-3' : 'h-0'">
@@ -15,53 +15,65 @@
             :class="mobileDeck === 'B' ? '-translate-x-1/2' : 'translate-x-0'"
           >
             <!-- Deck A stage -->
-            <div class="w-1/2 flex-shrink-0 flex gap-2 items-stretch sm:pr-1.5">
-              <div class="flex-1 min-w-0 flex flex-col gap-1.5">
-                <div class="rounded-lg overflow-hidden bg-black relative h-32 sm:h-40">
-                  <img v-if="deckA?.thumbUrl" :src="deckA.thumbUrl" :alt="deckA?.title" class="w-full h-full object-cover" />
-                  <div v-else class="w-full h-full flex items-center justify-center" style="background: var(--bg-tertiary);">
-                    <svg class="w-10 h-10" style="color: var(--text-tertiary);" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" /></svg>
+            <div class="w-1/2 flex-shrink-0 px-1 sm:px-2">
+              <div class="surface-2 rounded-xl p-2 sm:p-3 flex flex-col gap-2">
+                <div class="flex items-center gap-3">
+                  <!-- Tempo fader (outer edge) -->
+                  <div v-if="deckA" class="flex flex-col items-center gap-1 flex-shrink-0">
+                    <span class="text-[9px] uppercase tracking-wider" style="color: var(--text-tertiary);">Tempo</span>
+                    <input type="range" min="0.25" max="2" step="0.05" :value="rateA" @input="setRate('A', Number(($event.target as HTMLInputElement).value))" class="xfader-v h-24 sm:h-28" aria-label="Deck A tempo" />
+                    <span class="text-[11px] font-mono" style="color: var(--text-secondary);">{{ rateA.toFixed(2) }}×</span>
+                    <span v-if="deckA.bpm" class="text-[11px] font-mono" style="color: var(--accent);">{{ Math.round(deckA.bpm * rateA) }}</span>
+                    <button @click="syncDeck('A')" class="chip !py-0.5 !px-2 !text-[10px]" title="Match deck B's BPM">SYNC</button>
                   </div>
-                  <div v-if="loadingA" class="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/55">
-                    <div class="w-7 h-7 border-2 rounded-full animate-spin" style="border-color: var(--accent); border-top-color: transparent;"></div>
-                    <span v-if="preparingA" class="text-[10px] uppercase tracking-wider" style="color: var(--text-secondary);">Preparing…</span>
+                  <!-- Jog-wheel platter -->
+                  <div class="flex-1 flex justify-center">
+                    <div class="relative w-28 h-28 sm:w-36 sm:h-36 rounded-full overflow-hidden bg-black" style="box-shadow: 0 0 0 1px var(--border-strong), inset 0 0 24px rgba(0,0,0,0.7);">
+                      <img v-if="deckA?.thumbUrl" :src="deckA.thumbUrl" :alt="deckA?.title" class="w-full h-full object-cover" :class="playingA ? 'platter-spin' : ''" />
+                      <div v-else class="w-full h-full flex items-center justify-center" style="background: var(--bg-tertiary);">
+                        <svg class="w-8 h-8" style="color: var(--text-tertiary);" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" /></svg>
+                      </div>
+                      <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full ring-2 ring-black/60" style="background: var(--bg-secondary);"></div>
+                      <div v-if="loadingA" class="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-black/60">
+                        <div class="w-6 h-6 border-2 rounded-full animate-spin" style="border-color: var(--accent); border-top-color: transparent;"></div>
+                        <span v-if="preparingA" class="text-[9px] uppercase tracking-wider" style="color: var(--text-secondary);">Preparing…</span>
+                      </div>
+                      <div v-else-if="errorA" class="absolute inset-0 flex items-center justify-center bg-black/80 p-2 text-center text-[10px]" style="color: #ff6b6b;">{{ errorA }}</div>
+                    </div>
                   </div>
-                  <div v-else-if="errorA" class="absolute inset-0 flex items-center justify-center bg-black/75 p-3 text-center text-xs" style="color: #ff6b6b;">{{ errorA }}</div>
                 </div>
                 <input type="range" min="0" :max="durA || 0" step="0.1" :value="posA" @input="onSeekInput('A', Number(($event.target as HTMLInputElement).value))" @change="onSeekCommit('A', Number(($event.target as HTMLInputElement).value))" class="xfader w-full" style="touch-action: none;" :disabled="!deckA || loadingA" aria-label="Seek deck A" />
                 <div class="flex justify-between text-[10px] font-mono" style="color: var(--text-tertiary);"><span>{{ fmtTime(posA) }}</span><span>{{ fmtTime(durA) }}</span></div>
               </div>
-              <div v-if="deckA" class="flex flex-col items-center gap-1 flex-shrink-0 py-1">
-                <span class="text-[9px] uppercase tracking-wider" style="color: var(--text-tertiary);">Tempo</span>
-                <input type="range" min="0.25" max="2" step="0.05" :value="rateA" @input="setRate('A', Number(($event.target as HTMLInputElement).value))" class="xfader-v flex-1 min-h-0" aria-label="Deck A tempo" />
-                <span class="text-[11px] font-mono" style="color: var(--text-secondary);">{{ rateA.toFixed(2) }}×</span>
-                <span v-if="deckA.bpm" class="text-[11px] font-mono" style="color: var(--accent);">{{ Math.round(deckA.bpm * rateA) }}</span>
-                <button @click="syncDeck('A')" class="chip !py-0.5 !px-2 !text-[10px]" title="Match deck B's BPM">SYNC</button>
-              </div>
             </div>
-            <!-- Deck B stage (mirrors on desktop only) -->
-            <div class="w-1/2 flex-shrink-0 flex gap-2 items-stretch sm:flex-row-reverse sm:pl-1.5">
-              <div class="flex-1 min-w-0 flex flex-col gap-1.5">
-                <div class="rounded-lg overflow-hidden bg-black relative h-32 sm:h-40">
-                  <img v-if="deckB?.thumbUrl" :src="deckB.thumbUrl" :alt="deckB?.title" class="w-full h-full object-cover" />
-                  <div v-else class="w-full h-full flex items-center justify-center" style="background: var(--bg-tertiary);">
-                    <svg class="w-10 h-10" style="color: var(--text-tertiary);" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" /></svg>
+            <!-- Deck B stage (tempo on the outer edge; mirrors on desktop) -->
+            <div class="w-1/2 flex-shrink-0 px-1 sm:px-2">
+              <div class="surface-2 rounded-xl p-2 sm:p-3 flex flex-col gap-2">
+                <div class="flex items-center gap-3 sm:flex-row-reverse">
+                  <div v-if="deckB" class="flex flex-col items-center gap-1 flex-shrink-0">
+                    <span class="text-[9px] uppercase tracking-wider" style="color: var(--text-tertiary);">Tempo</span>
+                    <input type="range" min="0.25" max="2" step="0.05" :value="rateB" @input="setRate('B', Number(($event.target as HTMLInputElement).value))" class="xfader-v h-24 sm:h-28" aria-label="Deck B tempo" />
+                    <span class="text-[11px] font-mono" style="color: var(--text-secondary);">{{ rateB.toFixed(2) }}×</span>
+                    <span v-if="deckB.bpm" class="text-[11px] font-mono" style="color: var(--accent);">{{ Math.round(deckB.bpm * rateB) }}</span>
+                    <button @click="syncDeck('B')" class="chip !py-0.5 !px-2 !text-[10px]" title="Match deck A's BPM">SYNC</button>
                   </div>
-                  <div v-if="loadingB" class="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/55">
-                    <div class="w-7 h-7 border-2 rounded-full animate-spin" style="border-color: var(--accent); border-top-color: transparent;"></div>
-                    <span v-if="preparingB" class="text-[10px] uppercase tracking-wider" style="color: var(--text-secondary);">Preparing…</span>
+                  <div class="flex-1 flex justify-center">
+                    <div class="relative w-28 h-28 sm:w-36 sm:h-36 rounded-full overflow-hidden bg-black" style="box-shadow: 0 0 0 1px var(--border-strong), inset 0 0 24px rgba(0,0,0,0.7);">
+                      <img v-if="deckB?.thumbUrl" :src="deckB.thumbUrl" :alt="deckB?.title" class="w-full h-full object-cover" :class="playingB ? 'platter-spin' : ''" />
+                      <div v-else class="w-full h-full flex items-center justify-center" style="background: var(--bg-tertiary);">
+                        <svg class="w-8 h-8" style="color: var(--text-tertiary);" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" /></svg>
+                      </div>
+                      <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full ring-2 ring-black/60" style="background: var(--bg-secondary);"></div>
+                      <div v-if="loadingB" class="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-black/60">
+                        <div class="w-6 h-6 border-2 rounded-full animate-spin" style="border-color: var(--accent); border-top-color: transparent;"></div>
+                        <span v-if="preparingB" class="text-[9px] uppercase tracking-wider" style="color: var(--text-secondary);">Preparing…</span>
+                      </div>
+                      <div v-else-if="errorB" class="absolute inset-0 flex items-center justify-center bg-black/80 p-2 text-center text-[10px]" style="color: #ff6b6b;">{{ errorB }}</div>
+                    </div>
                   </div>
-                  <div v-else-if="errorB" class="absolute inset-0 flex items-center justify-center bg-black/75 p-3 text-center text-xs" style="color: #ff6b6b;">{{ errorB }}</div>
                 </div>
                 <input type="range" min="0" :max="durB || 0" step="0.1" :value="posB" @input="onSeekInput('B', Number(($event.target as HTMLInputElement).value))" @change="onSeekCommit('B', Number(($event.target as HTMLInputElement).value))" class="xfader w-full" style="touch-action: none;" :disabled="!deckB || loadingB" aria-label="Seek deck B" />
                 <div class="flex justify-between text-[10px] font-mono" style="color: var(--text-tertiary);"><span>{{ fmtTime(posB) }}</span><span>{{ fmtTime(durB) }}</span></div>
-              </div>
-              <div v-if="deckB" class="flex flex-col items-center gap-1 flex-shrink-0 py-1">
-                <span class="text-[9px] uppercase tracking-wider" style="color: var(--text-tertiary);">Tempo</span>
-                <input type="range" min="0.25" max="2" step="0.05" :value="rateB" @input="setRate('B', Number(($event.target as HTMLInputElement).value))" class="xfader-v flex-1 min-h-0" aria-label="Deck B tempo" />
-                <span class="text-[11px] font-mono" style="color: var(--text-secondary);">{{ rateB.toFixed(2) }}×</span>
-                <span v-if="deckB.bpm" class="text-[11px] font-mono" style="color: var(--accent);">{{ Math.round(deckB.bpm * rateB) }}</span>
-                <button @click="syncDeck('B')" class="chip !py-0.5 !px-2 !text-[10px]" title="Match deck A's BPM">SYNC</button>
               </div>
             </div>
           </div>
@@ -474,10 +486,24 @@ function fmtTime(sec: number) {
   return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`
 }
 
+// Publish the player's height as a CSS var so pages can pad their content and
+// keep their own fixed bars (e.g. the setlist "Add track" bar) above the player.
+const barEl = ref<HTMLElement | null>(null)
+let ro: ResizeObserver | null = null
+function publishHeight() {
+  const h = visible.value && barEl.value ? barEl.value.offsetHeight : 0
+  document.documentElement.style.setProperty('--player-height', `${h}px`)
+}
+
 onMounted(() => {
   window.addEventListener('pointerdown', unlockAudio)
   window.addEventListener('touchend', unlockAudio)
   window.addEventListener('click', unlockAudio)
+  if (barEl.value) {
+    ro = new ResizeObserver(publishHeight)
+    ro.observe(barEl.value)
+  }
+  publishHeight()
   if (deckA.value) loadDeck('A', deckA.value)
   if (deckB.value) loadDeck('B', deckB.value)
 })
@@ -485,7 +511,11 @@ onBeforeUnmount(() => {
   window.removeEventListener('pointerdown', unlockAudio)
   window.removeEventListener('touchend', unlockAudio)
   window.removeEventListener('click', unlockAudio)
+  ro?.disconnect()
+  document.documentElement.style.setProperty('--player-height', '0px')
 })
+
+watch([visible, expanded], () => nextTick(publishHeight))
 
 watch(() => deckA.value, (d) => { if (d) loadDeck('A', d); else teardown('A') })
 watch(() => deckB.value, (d) => { if (d) loadDeck('B', d); else teardown('B') })
@@ -493,6 +523,11 @@ watch(crossfade, applyVolumes)
 </script>
 
 <style scoped>
+/* Spinning jog-wheel platter while a deck plays */
+@keyframes platterSpin { to { transform: rotate(360deg); } }
+.platter-spin { animation: platterSpin 3.2s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .platter-spin { animation: none; } }
+
 .xfader {
   -webkit-appearance: none;
   appearance: none;
