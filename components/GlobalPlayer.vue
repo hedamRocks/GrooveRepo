@@ -208,8 +208,19 @@ const nodes: Record<DeckId, DeckNode> = { A: freshDeck(), B: freshDeck() }
 let ctx: AudioContext | null = null
 let iosUnlocked = false
 
+// Tell iOS this is media playback so the Web Audio output ignores the physical
+// ring/silent switch (otherwise the AudioContext is muted when the phone is on
+// silent). Supported on iOS 16.4+; a no-op elsewhere.
+function setPlaybackSession() {
+  try {
+    const session = (navigator as any).audioSession
+    if (session) session.type = 'playback'
+  } catch (e) { /* ignore */ }
+}
+
 function ensureCtx(): AudioContext {
   if (!ctx) {
+    setPlaybackSession()
     const Ctor = (window as any).AudioContext || (window as any).webkitAudioContext
     ctx = new Ctor()
     nodes.A.gain = ctx.createGain()
@@ -225,6 +236,7 @@ function ensureCtx(): AudioContext {
 // iOS keeps the context suspended until a sound is started inside a real user
 // gesture — resume() alone isn't enough, so also play a 1-sample silent buffer.
 function unlockAudio() {
+  setPlaybackSession()
   const audio = ensureCtx()
   if (audio.state === 'suspended') audio.resume().catch(() => {})
   if (iosUnlocked) return
