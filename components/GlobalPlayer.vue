@@ -206,6 +206,7 @@ function freshDeck(): DeckNode {
 const nodes: Record<DeckId, DeckNode> = { A: freshDeck(), B: freshDeck() }
 
 let ctx: AudioContext | null = null
+let iosUnlocked = false
 
 function ensureCtx(): AudioContext {
   if (!ctx) {
@@ -219,6 +220,22 @@ function ensureCtx(): AudioContext {
   }
   if (ctx.state === 'suspended') ctx.resume().catch(() => {})
   return ctx
+}
+
+// iOS keeps the context suspended until a sound is started inside a real user
+// gesture — resume() alone isn't enough, so also play a 1-sample silent buffer.
+function unlockAudio() {
+  const audio = ensureCtx()
+  if (audio.state === 'suspended') audio.resume().catch(() => {})
+  if (iosUnlocked) return
+  try {
+    const buf = audio.createBuffer(1, 1, 22050)
+    const src = audio.createBufferSource()
+    src.buffer = buf
+    src.connect(audio.destination)
+    src.start(0)
+    iosUnlocked = true
+  } catch (e) { /* ignore */ }
 }
 
 // Equal-power crossfade; a deck with no buffer stays silent
@@ -282,7 +299,7 @@ function pausePlayback(d: DeckId) {
 }
 
 function togglePlay(d: DeckId) {
-  ensureCtx()
+  unlockAudio()
   if (!nodes[d].buffer) return
   if ((d === 'A' ? playingA : playingB).value) pausePlayback(d)
   else startPlayback(d, nodes[d].startOffset)
@@ -304,7 +321,7 @@ function onSeekCommit(d: DeckId, t: number) {
 
 // --- Cue (hold to preview from the cue point) ---
 function startCue(d: DeckId) {
-  ensureCtx()
+  unlockAudio()
   if (!nodes[d].buffer) return
   nodes[d].cueing = true
   startPlayback(d, cueRef(d).value)
@@ -445,15 +462,18 @@ function fmtTime(sec: number) {
   return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`
 }
 
-// Unlock/resume the AudioContext on the first user gesture (iOS requirement)
-function unlock() { ensureCtx() }
-
 onMounted(() => {
-  window.addEventListener('pointerdown', unlock)
+  window.addEventListener('pointerdown', unlockAudio)
+  window.addEventListener('touchend', unlockAudio)
+  window.addEventListener('click', unlockAudio)
   if (deckA.value) loadDeck('A', deckA.value)
   if (deckB.value) loadDeck('B', deckB.value)
 })
-onBeforeUnmount(() => window.removeEventListener('pointerdown', unlock))
+onBeforeUnmount(() => {
+  window.removeEventListener('pointerdown', unlockAudio)
+  window.removeEventListener('touchend', unlockAudio)
+  window.removeEventListener('click', unlockAudio)
+})
 
 watch(() => deckA.value, (d) => { if (d) loadDeck('A', d); else teardown('A') })
 watch(() => deckB.value, (d) => { if (d) loadDeck('B', d); else teardown('B') })
