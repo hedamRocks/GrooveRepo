@@ -7,19 +7,41 @@
   >
     <div ref="barEl" class="w-full" style="background: var(--bg-secondary); border-top: 1px solid var(--border-subtle); box-shadow: var(--shadow-lg);">
 
-      <!-- Stage (artwork + seek + tempo). Clipped to 0 height when collapsed. -->
-      <div class="overflow-hidden transition-all duration-300" :class="expanded ? 'pt-3' : 'h-0'">
-        <div class="overflow-hidden max-w-5xl mx-auto px-3">
+      <!-- Top strip: now-playing + collapse, spans the whole player -->
+      <div class="flex items-center justify-between gap-3 max-w-5xl mx-auto px-4 pt-2.5 pb-1">
+        <div class="flex items-center gap-4 min-w-0 text-[11px]">
+          <span v-if="deckA" class="flex items-center gap-1.5 min-w-0 max-w-[48%]">
+            <span class="w-1.5 h-1.5 rounded-full flex-shrink-0" :style="{ background: playingA ? 'var(--accent)' : 'var(--text-tertiary)' }"></span>
+            <span class="truncate" style="color: var(--text-secondary);">{{ deckA.title }}</span>
+          </span>
+          <span v-if="deckB" class="flex items-center gap-1.5 min-w-0 max-w-[48%]">
+            <span class="w-1.5 h-1.5 rounded-full flex-shrink-0" :style="{ background: playingB ? 'var(--accent)' : 'var(--text-tertiary)' }"></span>
+            <span class="truncate" style="color: var(--text-secondary);">{{ deckB.title }}</span>
+          </span>
+          <span v-if="!deckA && !deckB" class="text-[10px] uppercase tracking-wider" style="color: var(--text-tertiary);">Player</span>
+        </div>
+        <button @click="toggleExpanded" class="icon-btn p-2 flex-shrink-0" :title="expanded ? 'Collapse' : 'Expand'" :aria-label="expanded ? 'Collapse player' : 'Expand player'">
+          <svg v-if="expanded" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 13l-7 7-7-7" /></svg>
+          <svg v-else class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 11l7-7 7 7" /></svg>
+        </button>
+      </div>
+
+      <!-- Stage (collapses together with the controls below) -->
+      <div v-show="expanded" class="overflow-hidden">
+        <div class="overflow-hidden max-w-5xl mx-auto px-3 sm:px-4 pt-1">
           <div
             class="flex w-[200%] sm:w-full transition-transform duration-300 ease-out sm:!translate-x-0"
             :class="mobileDeck === 'B' ? '-translate-x-1/2' : 'translate-x-0'"
           >
             <!-- Deck A stage -->
-            <div class="w-1/2 flex-shrink-0 px-1 sm:px-2">
-              <div class="surface-2 rounded-xl p-2 sm:p-3 flex flex-col gap-2">
-                <div class="flex items-center gap-3">
+            <div class="w-1/2 flex-shrink-0 px-1.5 sm:px-2.5">
+              <div class="surface-2 rounded-xl p-3 sm:p-4 flex flex-col gap-3 relative">
+                <button v-if="deckA" @click="clearDeck('A')" class="absolute top-2 right-2 z-10 icon-danger p-1.5 rounded-lg" title="Remove from deck A" aria-label="Remove track from deck A">
+                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+                <div class="flex items-center gap-4">
                   <!-- Tempo fader (outer edge) -->
-                  <div v-if="deckA" class="flex flex-col items-center gap-1 flex-shrink-0">
+                  <div v-if="deckA" class="flex flex-col items-center gap-1.5 flex-shrink-0">
                     <span class="text-[9px] uppercase tracking-wider" style="color: var(--text-tertiary);">Tempo</span>
                     <input type="range" min="0.25" max="2" step="0.05" :value="rateA" @input="setRate('A', Number(($event.target as HTMLInputElement).value))" class="xfader-v h-24 sm:h-28" aria-label="Deck A tempo" />
                     <span class="text-[11px] font-mono" style="color: var(--text-secondary);">{{ rateA.toFixed(2) }}×</span>
@@ -47,10 +69,13 @@
               </div>
             </div>
             <!-- Deck B stage (tempo on the outer edge; mirrors on desktop) -->
-            <div class="w-1/2 flex-shrink-0 px-1 sm:px-2">
-              <div class="surface-2 rounded-xl p-2 sm:p-3 flex flex-col gap-2">
-                <div class="flex items-center gap-3 sm:flex-row-reverse">
-                  <div v-if="deckB" class="flex flex-col items-center gap-1 flex-shrink-0">
+            <div class="w-1/2 flex-shrink-0 px-1.5 sm:px-2.5">
+              <div class="surface-2 rounded-xl p-3 sm:p-4 flex flex-col gap-3 relative">
+                <button v-if="deckB" @click="clearDeck('B')" class="absolute top-2 right-2 z-10 icon-danger p-1.5 rounded-lg" title="Remove from deck B" aria-label="Remove track from deck B">
+                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+                <div class="flex items-center gap-4 sm:flex-row-reverse">
+                  <div v-if="deckB" class="flex flex-col items-center gap-1.5 flex-shrink-0">
                     <span class="text-[9px] uppercase tracking-wider" style="color: var(--text-tertiary);">Tempo</span>
                     <input type="range" min="0.25" max="2" step="0.05" :value="rateB" @input="setRate('B', Number(($event.target as HTMLInputElement).value))" class="xfader-v h-24 sm:h-28" aria-label="Deck B tempo" />
                     <span class="text-[11px] font-mono" style="color: var(--text-secondary);">{{ rateB.toFixed(2) }}×</span>
@@ -80,11 +105,11 @@
         </div>
       </div>
 
-      <!-- Control bar -->
-      <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 p-3 max-w-5xl mx-auto">
+      <!-- Control bar (collapses with the stage) -->
+      <div v-show="expanded" class="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-5 px-4 pt-2 max-w-5xl mx-auto" style="padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 18px);">
 
         <!-- Mobile deck selector -->
-        <div class="sm:hidden order-2 flex gap-1 p-1 rounded-full w-full" style="background: var(--bg-tertiary);">
+        <div class="sm:hidden order-1 flex gap-1 p-1 rounded-full w-full" style="background: var(--bg-tertiary);">
           <button @click="mobileDeck = 'A'" class="flex-1 py-1.5 rounded-full text-xs font-medium transition-colors" :style="mobileDeck === 'A' ? 'background: var(--accent); color:#fff;' : 'color: var(--text-secondary);'">
             Deck A<span v-if="deckA" class="opacity-70"> · {{ playingA ? '▸' : '⏸' }}</span>
           </button>
@@ -93,9 +118,8 @@
           </button>
         </div>
 
-        <!-- Deck A controls -->
-        <div :class="mobileDeck === 'A' ? 'flex' : 'hidden'" class="items-center gap-2 min-w-0 w-full sm:w-auto sm:flex-1 order-3 sm:order-1 sm:!flex">
-          <span class="text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0" :style="deckA ? 'background: var(--accent); color:#fff;' : 'background: var(--bg-tertiary); color: var(--text-tertiary);'">A</span>
+        <!-- Deck A transport -->
+        <div :class="mobileDeck === 'A' ? 'flex' : 'hidden'" class="items-center justify-center sm:justify-end gap-2.5 w-full sm:w-auto sm:flex-1 order-2 sm:order-1 sm:!flex">
           <button v-if="deckA" @click="togglePlay('A')" class="dj-btn flex-shrink-0" :class="playingA ? 'dj-btn-lit' : ''" :title="playingA ? 'Pause deck A' : 'Play deck A'" :aria-label="playingA ? 'Pause deck A' : 'Play deck A'">
             <svg v-if="playingA" class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M6 5h4v14H6zM14 5h4v14h-4z" /></svg>
             <svg v-else class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
@@ -111,26 +135,18 @@
           <button v-if="deckA" @click="setCue('A')" class="chip !py-1 !px-2.5 font-mono !text-xs flex-shrink-0" title="Set cue point to current position">
             ⚑ {{ fmtTime(cueA) }}
           </button>
-          <div class="hidden sm:block min-w-0">
-            <p class="text-xs font-medium truncate" style="color: var(--text-primary);">{{ deckA?.title || 'Empty deck' }}</p>
-            <p class="text-[11px] truncate" style="color: var(--text-secondary);">{{ deckA?.artist || '—' }}</p>
-          </div>
-          <button v-if="deckA" @click="clearDeck('A')" class="icon-danger p-2 flex-shrink-0" title="Remove from deck A" aria-label="Remove track from deck A">
-            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-          </button>
         </div>
 
-        <!-- Crossfader (always visible; kept off the screen edges) -->
-        <div class="flex flex-col items-center gap-1.5 flex-shrink-0 w-3/5 self-center sm:self-auto sm:w-48 order-4 sm:order-2">
+        <!-- Crossfader -->
+        <div class="flex flex-col items-center gap-3 flex-shrink-0 w-3/5 self-center sm:self-auto sm:w-56 order-3 sm:order-2 py-1">
           <input type="range" min="0" max="100" v-model.number="crossfade" class="xfader w-full" style="touch-action: none;" aria-label="Crossfader between deck A and deck B" />
           <div class="flex justify-between w-full text-[9px] uppercase tracking-wider" style="color: var(--text-tertiary);">
             <span>A</span><span>fade</span><span>B</span>
           </div>
         </div>
 
-        <!-- Deck B controls (same DOM order as A; mirrors only on desktop) -->
-        <div :class="mobileDeck === 'B' ? 'flex' : 'hidden'" class="items-center gap-2 min-w-0 w-full sm:w-auto sm:flex-1 order-3 sm:order-3 sm:!flex sm:flex-row-reverse sm:justify-end">
-          <span class="text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0" :style="deckB ? 'background: var(--accent); color:#fff;' : 'background: var(--bg-tertiary); color: var(--text-tertiary);'">B</span>
+        <!-- Deck B transport -->
+        <div :class="mobileDeck === 'B' ? 'flex' : 'hidden'" class="items-center justify-center sm:justify-start gap-2.5 w-full sm:w-auto sm:flex-1 order-2 sm:order-3 sm:!flex">
           <button v-if="deckB" @click="togglePlay('B')" class="dj-btn flex-shrink-0" :class="playingB ? 'dj-btn-lit' : ''" :title="playingB ? 'Pause deck B' : 'Play deck B'" :aria-label="playingB ? 'Pause deck B' : 'Play deck B'">
             <svg v-if="playingB" class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M6 5h4v14H6zM14 5h4v14h-4z" /></svg>
             <svg v-else class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
@@ -145,24 +161,6 @@
           </button>
           <button v-if="deckB" @click="setCue('B')" class="chip !py-1 !px-2.5 font-mono !text-xs flex-shrink-0" title="Set cue point to current position">
             ⚑ {{ fmtTime(cueB) }}
-          </button>
-          <div class="hidden sm:block min-w-0 sm:text-right">
-            <p class="text-xs font-medium truncate" style="color: var(--text-primary);">{{ deckB?.title || 'Empty deck' }}</p>
-            <p class="text-[11px] truncate" style="color: var(--text-secondary);">{{ deckB?.artist || '—' }}</p>
-          </div>
-          <button v-if="deckB" @click="clearDeck('B')" class="icon-danger p-2 flex-shrink-0" title="Remove from deck B" aria-label="Remove track from deck B">
-            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-          </button>
-        </div>
-
-        <!-- Window controls -->
-        <div class="flex items-center gap-0.5 flex-shrink-0 self-end sm:self-auto order-1 sm:order-4 sm:pl-1 sm:border-l sm:border-white/10">
-          <button @click="toggleExpanded" class="icon-btn p-2" :title="expanded ? 'Collapse' : 'Expand'" :aria-label="expanded ? 'Collapse player' : 'Expand player'">
-            <svg v-if="expanded" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 13l-7 7-7-7" /></svg>
-            <svg v-else class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 11l7-7 7 7" /></svg>
-          </button>
-          <button @click="onClose" class="icon-danger p-2" title="Close player" aria-label="Close player">
-            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
       </div>
