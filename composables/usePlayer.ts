@@ -1,15 +1,15 @@
 /**
- * Global dual-deck YouTube audio player state.
+ * Global dual-deck audio player state.
  *
  * Shared via useState so the bottom player (mounted once in the default layout)
  * survives route changes and can be driven from anywhere (e.g. the setlist
- * page's per-track "play on deck A/B" buttons). The actual YT.Player instances
- * live in components/GlobalPlayer.vue, which reacts to this state.
+ * page's per-track "play on deck A/B" buttons). The Web Audio engine that
+ * actually decodes + mixes the tracks lives in components/GlobalPlayer.vue,
+ * which reacts to this state. Audio bytes come from /api/audio/:trackId.
  */
 
 export interface DeckTrack {
   trackId: string
-  videoId: string
   title: string
   artist: string
   thumbUrl: string | null
@@ -46,41 +46,27 @@ export function usePlayer() {
   }
 
   /**
-   * Resolve the track to a YouTube video and load it onto the given deck.
-   * Slides the player up and snaps the crossfader to that deck so you
-   * immediately hear what you just loaded.
+   * Load a track onto the given deck. The Web Audio engine (GlobalPlayer)
+   * fetches + decodes the audio. Slides the player up; snaps the crossfader to
+   * that deck only when the player was empty (so the first track is audible).
    */
-  async function playOnDeck(deck: DeckId, track: PlayableTrack) {
-    loadingDeck.value = deck
-    try {
-      const res = await $fetch<{ videoId: string; title: string }>(
-        '/api/youtube/resolve',
-        { method: 'POST', body: { trackId: track.id } }
-      )
+  function playOnDeck(deck: DeckId, track: PlayableTrack) {
+    // Autoplay only when the player is currently empty. If a track is already
+    // loaded, just cue this one and leave the crossfader where it is.
+    const wasEmpty = !deckA.value && !deckB.value
 
-      // Autoplay only when the player is currently empty. If a track is already
-      // loaded, just cue this one and leave the crossfader where it is.
-      const wasEmpty = !deckA.value && !deckB.value
-
-      deckRef(deck).value = {
-        trackId: track.id,
-        videoId: res.videoId,
-        title: track.title,
-        artist: track.artist,
-        thumbUrl: track.thumbUrl ?? null,
-        bpm: track.bpm ?? null,
-        autoplay: wasEmpty
-      }
-
-      if (wasEmpty) crossfade.value = deck === 'A' ? 0 : 100
-      visible.value = true
-      expanded.value = true
-    } catch (e: any) {
-      console.error('[Player] Failed to load track:', e)
-      alert(e?.data?.message || 'Could not find a YouTube source for this track')
-    } finally {
-      loadingDeck.value = null
+    deckRef(deck).value = {
+      trackId: track.id,
+      title: track.title,
+      artist: track.artist,
+      thumbUrl: track.thumbUrl ?? null,
+      bpm: track.bpm ?? null,
+      autoplay: wasEmpty
     }
+
+    if (wasEmpty) crossfade.value = deck === 'A' ? 0 : 100
+    visible.value = true
+    expanded.value = true
   }
 
   function clearDeck(deck: DeckId) {
