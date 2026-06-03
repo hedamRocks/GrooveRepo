@@ -66,12 +66,12 @@
           <button
             v-if="deckA"
             @click="togglePlay('A')"
-            class="icon-btn p-1.5 flex-shrink-0"
+            class="icon-btn p-2.5 flex-shrink-0"
             :title="playingA ? 'Pause deck A' : 'Play deck A'"
             :aria-label="playingA ? 'Pause deck A' : 'Play deck A'"
           >
-            <svg v-if="playingA" class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M6 5h4v14H6zM14 5h4v14h-4z" /></svg>
-            <svg v-else class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+            <svg v-if="playingA" class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M6 5h4v14H6zM14 5h4v14h-4z" /></svg>
+            <svg v-else class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
           </button>
           <button
             v-if="deckA"
@@ -80,32 +80,34 @@
             @mouseleave="stopCue('A')"
             @touchstart.prevent="startCue('A')"
             @touchend.prevent="stopCue('A')"
-            class="icon-btn p-1.5 flex-shrink-0"
+            class="icon-btn p-2.5 flex-shrink-0"
             title="Cue — hold to preview from the cue point"
             aria-label="Cue deck A (hold to preview)"
           >
-            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none" /></svg>
+            <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none" /></svg>
           </button>
-          <button v-if="deckA" @click="setCue('A')" class="chip !py-0.5 !px-1.5 font-mono !text-[10px] flex-shrink-0" title="Set cue point to current position">
+          <button v-if="deckA" @click="setCue('A')" class="chip !py-1 !px-2.5 font-mono !text-xs flex-shrink-0" title="Set cue point to current position">
             ⚑ {{ formatTime(cueA) }}
           </button>
-          <div class="min-w-0">
+          <div class="hidden sm:block min-w-0">
             <p class="text-xs font-medium truncate" style="color: var(--text-primary);">{{ deckA?.title || 'Empty deck' }}</p>
             <p class="text-[11px] truncate" style="color: var(--text-secondary);">{{ deckA?.artist || '—' }}</p>
           </div>
-          <button v-if="deckA" @click="clearDeck('A')" class="icon-danger p-1 flex-shrink-0" title="Remove from deck A" aria-label="Remove track from deck A">
-            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+          <button v-if="deckA" @click="clearDeck('A')" class="icon-danger p-2 flex-shrink-0" title="Remove from deck A" aria-label="Remove track from deck A">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
 
-        <!-- Crossfader (always visible) -->
-        <div class="flex flex-col items-center gap-1 flex-shrink-0 w-full sm:w-44 order-4 sm:order-2">
+        <!-- Crossfader (always visible; kept off the screen edges so a sideways
+             drag doesn't trigger the browser's back-swipe) -->
+        <div class="flex flex-col items-center gap-1.5 flex-shrink-0 w-3/5 self-center sm:self-auto sm:w-48 order-4 sm:order-2">
           <input
             type="range"
             min="0"
             max="100"
             v-model.number="crossfade"
             class="xfader w-full"
+            style="touch-action: none;"
             aria-label="Crossfader between deck A and deck B"
           />
           <div class="flex justify-between w-full text-[9px] uppercase tracking-wider" style="color: var(--text-tertiary);">
@@ -121,12 +123,12 @@
           <button
             v-if="deckB"
             @click="togglePlay('B')"
-            class="icon-btn p-1.5 flex-shrink-0"
+            class="icon-btn p-2.5 flex-shrink-0"
             :title="playingB ? 'Pause deck B' : 'Play deck B'"
             :aria-label="playingB ? 'Pause deck B' : 'Play deck B'"
           >
-            <svg v-if="playingB" class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M6 5h4v14H6zM14 5h4v14h-4z" /></svg>
-            <svg v-else class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+            <svg v-if="playingB" class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M6 5h4v14H6zM14 5h4v14h-4z" /></svg>
+            <svg v-else class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
           </button>
           <button
             v-if="deckB"
@@ -135,31 +137,31 @@
             @mouseleave="stopCue('B')"
             @touchstart.prevent="startCue('B')"
             @touchend.prevent="stopCue('B')"
-            class="icon-btn p-1.5 flex-shrink-0"
+            class="icon-btn p-2.5 flex-shrink-0"
             title="Cue — hold to preview from the cue point"
             aria-label="Cue deck B (hold to preview)"
           >
-            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none" /></svg>
+            <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none" /></svg>
           </button>
-          <button v-if="deckB" @click="setCue('B')" class="chip !py-0.5 !px-1.5 font-mono !text-[10px] flex-shrink-0" title="Set cue point to current position">
+          <button v-if="deckB" @click="setCue('B')" class="chip !py-1 !px-2.5 font-mono !text-xs flex-shrink-0" title="Set cue point to current position">
             ⚑ {{ formatTime(cueB) }}
           </button>
-          <div class="min-w-0 sm:text-right">
+          <div class="hidden sm:block min-w-0 sm:text-right">
             <p class="text-xs font-medium truncate" style="color: var(--text-primary);">{{ deckB?.title || 'Empty deck' }}</p>
             <p class="text-[11px] truncate" style="color: var(--text-secondary);">{{ deckB?.artist || '—' }}</p>
           </div>
-          <button v-if="deckB" @click="clearDeck('B')" class="icon-danger p-1 flex-shrink-0" title="Remove from deck B" aria-label="Remove track from deck B">
-            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+          <button v-if="deckB" @click="clearDeck('B')" class="icon-danger p-2 flex-shrink-0" title="Remove from deck B" aria-label="Remove track from deck B">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
 
         <!-- Window controls (top-right on mobile, end of row on desktop) -->
         <div class="flex items-center gap-0.5 flex-shrink-0 self-end sm:self-auto order-1 sm:order-4 sm:pl-1 sm:border-l sm:border-white/10">
-          <button @click="toggleExpanded" class="icon-btn p-1.5" :title="expanded ? 'Collapse' : 'Expand'" :aria-label="expanded ? 'Collapse player' : 'Expand player'">
+          <button @click="toggleExpanded" class="icon-btn p-2" :title="expanded ? 'Collapse' : 'Expand'" :aria-label="expanded ? 'Collapse player' : 'Expand player'">
             <svg v-if="expanded" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 13l-7 7-7-7" /></svg>
             <svg v-else class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 11l7-7 7 7" /></svg>
           </button>
-          <button @click="closePlayer" class="icon-danger p-1.5" title="Close player" aria-label="Close player">
+          <button @click="closePlayer" class="icon-danger p-2" title="Close player" aria-label="Close player">
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
@@ -424,7 +426,7 @@ watch(crossfade, applyVolumes)
 .xfader {
   -webkit-appearance: none;
   appearance: none;
-  height: 6px;
+  height: 8px;
   border-radius: 999px;
   background: linear-gradient(to right, var(--accent), var(--bg-tertiary), var(--accent));
   outline: none;
@@ -433,19 +435,19 @@ watch(crossfade, applyVolumes)
 .xfader::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 18px;
-  height: 18px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   background: #fff;
-  border: 2px solid var(--accent);
-  box-shadow: var(--shadow-sm);
+  border: 3px solid var(--accent);
+  box-shadow: var(--shadow-md);
 }
 .xfader::-moz-range-thumb {
-  width: 18px;
-  height: 18px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   background: #fff;
-  border: 2px solid var(--accent);
+  border: 3px solid var(--accent);
 }
 
 /* Vertical tempo fader: bottom = slow, top = fast */
@@ -454,27 +456,28 @@ watch(crossfade, applyVolumes)
   appearance: none;
   writing-mode: vertical-lr;
   direction: rtl;
-  width: 6px;
+  width: 8px;
   border-radius: 999px;
   background: linear-gradient(to top, var(--bg-tertiary), var(--accent));
   outline: none;
   cursor: pointer;
+  touch-action: none;
 }
 .xfader-v::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 18px;
-  height: 18px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   background: #fff;
-  border: 2px solid var(--accent);
-  box-shadow: var(--shadow-sm);
+  border: 3px solid var(--accent);
+  box-shadow: var(--shadow-md);
 }
 .xfader-v::-moz-range-thumb {
-  width: 18px;
-  height: 18px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   background: #fff;
-  border: 2px solid var(--accent);
+  border: 3px solid var(--accent);
 }
 </style>

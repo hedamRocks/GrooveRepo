@@ -231,27 +231,27 @@
             <!-- Actions -->
             <div class="flex flex-col gap-0.5 flex-shrink-0">
               <!-- Play on a deck -->
-              <div class="flex gap-0.5">
-                <button @click="playOnDeck('A', toPlayable(setlistTrack))" :disabled="loadingDeck !== null" class="icon-btn px-1.5 py-1 rounded-lg inline-flex items-center gap-0.5 disabled:opacity-40" title="Play on deck A" aria-label="Play on deck A">
-                  <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
-                  <span class="text-[10px] font-bold">A</span>
+              <div class="flex gap-1">
+                <button @click="playOnDeck('A', toPlayable(setlistTrack))" :disabled="loadingDeck !== null" class="icon-btn surface-2 px-2.5 py-1.5 rounded-lg inline-flex items-center gap-1 disabled:opacity-40" title="Play on deck A" aria-label="Play on deck A">
+                  <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+                  <span class="text-xs font-bold">A</span>
                 </button>
-                <button @click="playOnDeck('B', toPlayable(setlistTrack))" :disabled="loadingDeck !== null" class="icon-btn px-1.5 py-1 rounded-lg inline-flex items-center gap-0.5 disabled:opacity-40" title="Play on deck B" aria-label="Play on deck B">
-                  <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
-                  <span class="text-[10px] font-bold">B</span>
+                <button @click="playOnDeck('B', toPlayable(setlistTrack))" :disabled="loadingDeck !== null" class="icon-btn surface-2 px-2.5 py-1.5 rounded-lg inline-flex items-center gap-1 disabled:opacity-40" title="Play on deck B" aria-label="Play on deck B">
+                  <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+                  <span class="text-xs font-bold">B</span>
                 </button>
               </div>
-              <button @click="openTagModal(setlistTrack.track)" class="icon-btn p-2 rounded-lg" title="Manage tags" aria-label="Manage tags">
+              <button @click="openTagModal(setlistTrack.track)" class="icon-btn p-2.5 rounded-lg" title="Manage tags" aria-label="Manage tags">
                 <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
                 </svg>
               </button>
-              <a :href="getYoutubeSearchUrl(setlistTrack.track.artist, setlistTrack.track.title)" target="_blank" rel="noopener noreferrer" class="icon-danger p-2 rounded-lg" title="Search on YouTube" aria-label="Search on YouTube">
+              <a :href="getYoutubeSearchUrl(setlistTrack.track.artist, setlistTrack.track.title)" target="_blank" rel="noopener noreferrer" class="icon-danger p-2.5 rounded-lg" title="Search on YouTube" aria-label="Search on YouTube">
                 <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
                 </svg>
               </a>
-              <button @click="openRemoveModal(setlistTrack)" class="icon-danger p-2 rounded-lg" title="Remove track" aria-label="Remove track">
+              <button @click="openRemoveModal(setlistTrack)" class="icon-danger p-2.5 rounded-lg" title="Remove track" aria-label="Remove track">
                 <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                 </svg>
