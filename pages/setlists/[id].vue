@@ -61,8 +61,47 @@
       <p v-if="analysisError" class="text-xs mb-4" style="color: #ff6b6b;">{{ analysisError }}</p>
 
       <!-- Filters -->
-      <div v-if="setlist.tracks.length > 0" class="space-y-2 mb-4">
-        <div class="flex items-center gap-2 overflow-x-auto pb-2 filter-options">
+      <!--
+        On mobile this bar sticks just under the 4rem AppNav (which is
+        `sticky top-0 z-50`), so it stays reachable while scrolling a long
+        setlist. `z-30` keeps it under the nav but above the track rows.
+        From `sm` up it returns to normal flow — there's room to spare.
+      -->
+      <div
+        v-if="setlist.tracks.length > 0"
+        class="space-y-2 mb-4 sticky top-16 z-30 -mx-4 px-4 sm:static sm:z-auto sm:mx-0 sm:px-0 filter-bar"
+      >
+        <!-- Mobile toggle: collapsed by default to keep the list tall -->
+        <div class="flex items-center justify-between gap-3 pt-2 sm:hidden">
+          <button
+            @click="showFilters = !showFilters"
+            class="chip !py-2"
+            :class="activeFilterCount ? 'chip-active' : ''"
+            :aria-expanded="showFilters"
+            aria-controls="setlist-filters"
+          >
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L14 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 018 21v-7.586L3.293 6.707A1 1 0 013 6V4z" />
+            </svg>
+            <span>{{ showFilters ? 'Hide filters' : 'Filters' }}</span>
+            <span v-if="activeFilterCount" class="ml-0.5 text-[11px] font-semibold">{{ activeFilterCount }}</span>
+          </button>
+
+          <!-- Clearing stays reachable while the bar is collapsed -->
+          <button
+            v-if="!showFilters && activeFilterCount"
+            @click="clearFilters"
+            class="btn-ghost text-xs shrink-0"
+          >
+            Clear
+          </button>
+        </div>
+
+        <div
+          id="setlist-filters"
+          class="flex items-center gap-2 overflow-x-auto pb-2 filter-options"
+          :class="showFilters ? 'flex' : 'hidden sm:flex'"
+        >
           <!-- Sort -->
           <div class="relative flex-shrink-0">
             <select v-model="sortValue" @change="handleSortChange($event)" class="input pl-3 pr-8 py-2 text-xs !rounded-full appearance-none cursor-pointer">
@@ -126,7 +165,7 @@
           <button v-if="selectedCountry || selectedTagIds.length > 0 || bpmFilter" @click="clearFilters" class="btn-ghost flex-shrink-0 text-xs">Clear</button>
         </div>
 
-        <div v-if="filteredTracks.length !== setlist.tracks.length" class="text-xs" style="color: var(--text-tertiary);">
+        <div v-if="filteredTracks.length !== setlist.tracks.length" class="text-xs pb-2" style="color: var(--text-tertiary);">
           Showing {{ filteredTracks.length }} of {{ setlist.tracks.length }} tracks
         </div>
       </div>
@@ -748,6 +787,21 @@ const tagFilterOperator = ref<'AND' | 'OR'>('OR')
 // BPM filter: show tracks within ±tolerance of the typed BPM
 const bpmFilter = ref<number | null>(null)
 const BPM_FILTER_TOLERANCE = 2
+
+// Filter bar collapse (mobile only — the bar is always shown from `sm` up).
+// Starts collapsed so the track list gets the most screen on a phone.
+const showFilters = ref(false)
+
+// Count of filters actually narrowing the list, shown on the collapsed toggle
+// so active filters aren't invisible while hidden. Sort is excluded — it
+// reorders rather than filters.
+const activeFilterCount = computed(() => {
+  let n = 0
+  if (selectedCountry.value) n++
+  if (selectedTagIds.value.length > 0) n++
+  if (bpmFilter.value) n++
+  return n
+})
 
 // Tag management
 const showTagManagementModal = ref(false)
@@ -1383,3 +1437,18 @@ onMounted(async () => {
   }
 })
 </script>
+
+<style scoped>
+/*
+ * The sticky filter bar needs its own backdrop on mobile — without one the
+ * track rows scroll visibly underneath it. Only applied below `sm`, where the
+ * bar is actually sticky; from `sm` up it sits in normal flow and stays
+ * transparent so the page background shows through as before.
+ */
+@media (max-width: 639px) {
+  .filter-bar {
+    background: var(--bg-primary);
+    border-bottom: 1px solid var(--border-subtle);
+  }
+}
+</style>
